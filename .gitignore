@@ -223,10 +223,38 @@ tmp/
 CLAUDE.md
 
 # System/user config
+.bash_history
 .bashrc
 .viminfo
 .wget-hsts
+.gitconfig
 .config/
 .local/
 .nv/
 .cache/
+
+# Binaries and libraries
+bin/
+lib/
+
+# Kubernetes config (contains credentials)
+.kube/
+
+# Streamlit app runtime files
+streamlit-app/jobs.json
+.streamlit/
+
+# Input files (user uploads)
+input/videos/
+input/texts/
+input/images/
+input/audio/
+
+# Output files (processed results)
+output/upscaled/
+output/audio/
+output/talking_face/
+
+# Keep the base input/output directories but ignore contents
+!input/.gitkeep
+!output/.gitkeep

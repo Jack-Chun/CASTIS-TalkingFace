@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD_NAME}
+  labels:
+    app: gpu-model-runner
+    model: chatterbox
+    job-id: ${JOB_ID}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: gpu-worker
+      image: ${IMAGE}
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/python/bin:/data/chatterbox-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+      command:
+        - /bin/bash
+        - -c
+        - |
+          # PLACEHOLDER: Chatterbox TTS inference
+          # This template will be updated when the Chatterbox repository is added
+
+          echo "=== Chatterbox TTS Generation ==="
+          echo "Text Input: ${INPUT_TEXT}"
+          echo "Output Audio: ${OUTPUT_AUDIO}"
+
+          source /data/chatterbox-venv/bin/activate
+
+          cd /data/Chatterbox
+
+          # TODO: Replace with actual Chatterbox inference command
+          # python inference.py \
+          #   --text "${INPUT_TEXT}" \
+          #   --output "${OUTPUT_AUDIO}" \
+          #   --voice "${VOICE}" \
+          #   --speed ${SPEED}
+
+          echo "ERROR: Chatterbox model not yet implemented"
+          exit 1
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data

@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD_NAME}
+  labels:
+    app: gpu-model-runner
+    model: realesrgan
+    job-id: ${JOB_ID}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: gpu-worker
+      image: sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/python/bin:/data/realesrgan-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+      command:
+        - /bin/bash
+        - -c
+        - |
+          source /data/realesrgan-venv/bin/activate
+
+          INPUT_VIDEO="${INPUT_VIDEO}"
+          OUTPUT_VIDEO="${OUTPUT_VIDEO}"
+          SCALE=${SCALE}
+          FRAMES_DIR="/data/tmp/${JOB_ID}/frames"
+          UPSCALED_DIR="/data/tmp/${JOB_ID}/frames_upscaled"
+
+          rm -rf ${FRAMES_DIR} ${UPSCALED_DIR}
+          mkdir -p ${FRAMES_DIR} ${UPSCALED_DIR}
+
+          echo "=== Real-ESRGAN Video Upscaling ==="
+          echo "Input: ${INPUT_VIDEO}"
+          echo "Output: ${OUTPUT_VIDEO}"
+          echo "Scale: ${SCALE}x"
+
+          # Step 1: Extract frames from video
+          echo "Step 1: Extracting frames from video..."
+          FRAMERATE=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 -show_entries stream=r_frame_rate "${INPUT_VIDEO}" | head -1)
+          ffmpeg -i "${INPUT_VIDEO}" "${FRAMES_DIR}/frame_%04d.png"
+          FRAME_COUNT=$(ls "${FRAMES_DIR}"/*.png 2>/dev/null | wc -l)
+          echo "Extracted ${FRAME_COUNT} frames at ${FRAMERATE} fps"
+
+          if [ "${FRAME_COUNT}" -eq 0 ]; then
+            echo "ERROR: No frames extracted!"
+            exit 1
+          fi
+
+          # Step 2: Upscale frames with Real-ESRGAN
+          echo "Step 2: Upscaling ${FRAME_COUNT} frames with Real-ESRGAN (${SCALE}x)..."
+          cd /data/Real-ESRGAN
+          python inference_realesrgan.py \
+            -n RealESRGAN_x${SCALE}plus \
+            -i "${FRAMES_DIR}" \
+            -o "${UPSCALED_DIR}" \
+            -s ${SCALE} \
+            --suffix '' \
+            ${FP32_FLAG}
+
+          UPSCALED_COUNT=$(ls "${UPSCALED_DIR}"/*.png 2>/dev/null | wc -l)
+          echo "Upscaled ${UPSCALED_COUNT} frames"
+
+          if [ "${UPSCALED_COUNT}" -eq 0 ]; then
+            echo "ERROR: No frames upscaled!"
+            exit 1
+          fi
+
+          # Step 3: Reassemble video from upscaled frames
+          echo "Step 3: Reassembling video from upscaled frames..."
+          ffmpeg -y -framerate ${FRAMERATE} -i "${UPSCALED_DIR}/frame_%04d.png" \
+            -i "${INPUT_VIDEO}" \
+            -map 0:v -map 1:a? \
+            -c:v libx264 -crf 18 -preset slower -profile:v high \
+            -c:a copy \
+            -pix_fmt yuv420p \
+            "${OUTPUT_VIDEO}"
+
+          # Cleanup temp frames
+          rm -rf "/data/tmp/${JOB_ID}"
+
+          # Get output video info
+          echo "=== Video upscaling complete! ==="
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "${OUTPUT_VIDEO}"
+          echo "Output file: ${OUTPUT_VIDEO}"
+          ls -lh "${OUTPUT_VIDEO}"
+
+          echo "DONE"
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data
