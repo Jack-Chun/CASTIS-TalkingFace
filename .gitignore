@@ -205,3 +205,28 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local environment - persistent storage items
+python/
+python310/
+Python-3.10.15/
+*-venv/
+pip_cache/
+huggingface/
+log/
+tmp/
+
+# Claude Code
+.claude/
+.claude.json
+.claude.json.backup
+CLAUDE.md
+
+# System/user config
+.bashrc
+.viminfo
+.wget-hsts
+.config/
+.local/
+.nv/
+.cache/

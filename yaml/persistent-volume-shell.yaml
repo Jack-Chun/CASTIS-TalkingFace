@@ -1,0 +1,39 @@
+# persistent-volume-shell.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: persistent-volume-shell
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: debian:bookworm
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/.local/bin:/data/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: HF_HOME
+          value: /data/huggingface
+        - name: PIP_CACHE_DIR
+          value: /data/pip_cache
+        - name: TMPDIR
+          value: /data/tmp
+      command:
+        - /bin/bash
+        - -c
+        - |
+          apt-get update && apt-get install -y tar curl wget vim git ffmpeg cmake libboost-all-dev libopenblas-dev liblapack-dev libx11-dev libgtk-3-dev build-essential g++
+          mkdir -p /data/huggingface /data/pip_cache /data/tmp
+          if [ ! -f /data/bin/code-server ]; then
+            curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/data
+          fi
+          sleep inf
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data
