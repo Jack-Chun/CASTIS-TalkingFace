@@ -5,6 +5,8 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 import os
 
+from config import IS_POD_ENV
+
 
 @dataclass
 class JobConfig:
@@ -57,8 +59,17 @@ class BaseModelRunner(ABC):
         pass
 
     def is_available(self) -> bool:
-        """Check if model directory exists and is accessible."""
-        return os.path.isdir(self.model_dir) and self.is_enabled
+        """Check if model is available.
+
+        When running locally, we can't check if the model directory exists
+        on the pod, so we just check if it's enabled in config.
+        """
+        if not self.is_enabled:
+            return False
+        # Skip directory check when running locally - we're just submitting jobs
+        if not IS_POD_ENV:
+            return True
+        return os.path.isdir(self.model_dir)
 
     @abstractmethod
     def get_yaml_template_path(self) -> str:
