@@ -11,7 +11,12 @@ from config import (
     YAML_TEMPLATE_DIR,
     OUTPUT_UPSCALED_DIR,
     INPUT_VIDEOS_DIR,
+    POD_INPUT_VIDEOS_DIR,
+    POD_OUTPUT_UPSCALED_DIR,
+    IS_POD_ENV,
+    PERSISTENT_POD_NAME,
 )
+from k8s.client import KubernetesClient
 
 
 class RealESRGANModel(BaseModelRunner):
@@ -116,7 +121,18 @@ class RealESRGANModel(BaseModelRunner):
         return yaml_content
 
     def get_output_path(self, job_id: str, input_files: Dict[str, str]) -> str:
-        """Calculate output path for upscaled video."""
+        """Calculate output path for upscaled video (POD path for YAML)."""
+        video_path = input_files.get("video", "")
+        if video_path:
+            base_name = os.path.splitext(os.path.basename(video_path))[0]
+        else:
+            base_name = "output"
+
+        # Always return pod path for YAML templates
+        return os.path.join(POD_OUTPUT_UPSCALED_DIR, f"{base_name}_{job_id}.mp4")
+
+    def get_local_output_path(self, job_id: str, input_files: Dict[str, str]) -> str:
+        """Calculate local output path for displaying results."""
         video_path = input_files.get("video", "")
         if video_path:
             base_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -124,6 +140,10 @@ class RealESRGANModel(BaseModelRunner):
             base_name = "output"
 
         return os.path.join(OUTPUT_UPSCALED_DIR, f"{base_name}_{job_id}.mp4")
+
+    def get_pod_input_path(self, job_id: str, filename: str) -> str:
+        """Get the pod path for an input file."""
+        return os.path.join(POD_INPUT_VIDEOS_DIR, job_id, filename)
 
     def get_output_type(self) -> str:
         return "video"
@@ -137,15 +157,45 @@ class RealESRGANModel(BaseModelRunner):
             return False, f"Video file not found: {video_path}"
         return True, ""
 
-    def save_uploaded_file(self, uploaded_file, job_id: str) -> str:
-        """Save uploaded file to input directory and return path."""
-        # Create job-specific directory
+    def save_uploaded_file(self, uploaded_file, job_id: str) -> tuple[str, str]:
+        """
+        Save uploaded file to input directory.
+
+        When running locally, also copies to the persistent volume pod.
+
+        Returns:
+            Tuple of (local_path, pod_path)
+        """
+        # Create local job-specific directory
         job_input_dir = os.path.join(INPUT_VIDEOS_DIR, job_id)
         os.makedirs(job_input_dir, exist_ok=True)
 
-        # Save file
-        file_path = os.path.join(job_input_dir, uploaded_file.name)
-        with open(file_path, "wb") as f:
+        # Save file locally
+        local_path = os.path.join(job_input_dir, uploaded_file.name)
+        with open(local_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
-        return file_path
+        # Calculate pod path
+        pod_path = self.get_pod_input_path(job_id, uploaded_file.name)
+
+        # If running locally, copy to the persistent volume pod
+        if not IS_POD_ENV:
+            k8s = KubernetesClient()
+
+            # First, create the directory on the pod
+            pod_job_dir = os.path.join(POD_INPUT_VIDEOS_DIR, job_id)
+            # Use exec to create directory
+            import subprocess
+            subprocess.run(
+                [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--",
+                 "mkdir", "-p", pod_job_dir],
+                capture_output=True,
+                timeout=30
+            )
+
+            # Copy the file to the pod
+            success, msg = k8s.copy_to_pod(local_path, PERSISTENT_POD_NAME, pod_path)
+            if not success:
+                raise RuntimeError(f"Failed to copy file to pod: {msg}")
+
+        return local_path, pod_path

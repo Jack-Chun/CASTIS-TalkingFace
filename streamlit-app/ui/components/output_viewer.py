@@ -5,6 +5,46 @@ import os
 
 from job_manager.manager import JobManager, JobState
 from ui.common import format_file_size
+from config import IS_POD_ENV, PERSISTENT_POD_NAME
+from k8s.client import KubernetesClient
+
+
+def ensure_output_local(job) -> bool:
+    """
+    Ensure the output file is available locally.
+
+    When running locally, copies the file from the pod if needed.
+
+    Returns:
+        True if file is available locally, False otherwise
+    """
+    output_path = job.output_file
+
+    # If file already exists locally, we're good
+    if os.path.exists(output_path):
+        return True
+
+    # If running on pod, file should exist - if not, it's missing
+    if IS_POD_ENV:
+        return False
+
+    # Running locally - try to copy from pod
+    pod_output_path = job.model_params.get("output_pod_path")
+    if not pod_output_path:
+        return False
+
+    # Ensure local directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # Copy from pod
+    k8s = KubernetesClient()
+    success, msg = k8s.copy_from_pod(
+        PERSISTENT_POD_NAME,
+        pod_output_path,
+        output_path
+    )
+
+    return success
 
 
 def render_output_viewer(model_filter: str = None):
@@ -32,7 +72,8 @@ def render_output_viewer(model_filter: str = None):
     for job in completed_jobs:
         output_path = job.output_file
 
-        if not os.path.exists(output_path):
+        # Ensure file is available locally (copies from pod if needed)
+        if not ensure_output_local(job):
             st.warning(f"Output file not found: {output_path}")
             continue
 
@@ -129,7 +170,8 @@ def render_single_output(job_id: str):
 
     output_path = job.output_file
 
-    if not os.path.exists(output_path):
+    # Ensure file is available locally (copies from pod if needed)
+    if not ensure_output_local(job):
         st.warning(f"Output file not found: {output_path}")
         return
 

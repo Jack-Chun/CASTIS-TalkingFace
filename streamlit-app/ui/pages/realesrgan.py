@@ -73,20 +73,24 @@ def submit_realesrgan_job(model: RealESRGANModel, inputs: dict):
         job_id = generate_job_id(model.model_id)
         pod_name = generate_pod_name(model.model_id, job_id)
 
-        # Save uploaded file
+        # Save uploaded file (returns local_path, pod_path)
         video_file = inputs["files"]["video"]
-        video_path = model.save_uploaded_file(video_file, job_id)
+        local_video_path, pod_video_path = model.save_uploaded_file(video_file, job_id)
 
-        input_files = {"video": video_path}
+        # Use pod paths for YAML (what the GPU pod sees)
+        input_files = {"video": pod_video_path}
         params = inputs["params"]
 
-        # Calculate output path
+        # Calculate output path (pod path for YAML)
         output_path = model.get_output_path(job_id, input_files)
 
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Calculate local output path for tracking
+        local_output_path = model.get_local_output_path(job_id, {"video": local_video_path})
 
-        # Create job config
+        # Ensure local output directory exists (for when we copy results back)
+        os.makedirs(os.path.dirname(local_output_path), exist_ok=True)
+
+        # Create job config with pod paths
         config = JobConfig(
             job_id=job_id,
             pod_name=pod_name,
@@ -104,15 +108,15 @@ def submit_realesrgan_job(model: RealESRGANModel, inputs: dict):
         success, message = k8s.apply_yaml(yaml_content)
 
         if success:
-            # Register job
+            # Register job - store local output path for result viewing
             job_manager = JobManager()
             job_manager.create_job(
                 job_id=job_id,
                 pod_name=pod_name,
                 model_type=model.model_id,
-                input_files=input_files,
-                output_file=output_path,
-                model_params=params,
+                input_files={"video": local_video_path, "video_pod": pod_video_path},
+                output_file=local_output_path,  # Local path for viewing results
+                model_params={**params, "output_pod_path": output_path},  # Store pod path too
             )
             show_success_toast(f"Job submitted: {job_id}")
             st.rerun()

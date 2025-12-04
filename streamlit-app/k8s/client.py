@@ -153,3 +153,59 @@ class KubernetesClient:
             except json.JSONDecodeError:
                 return None
         return None
+
+    def copy_to_pod(
+        self,
+        local_path: str,
+        pod_name: str,
+        pod_path: str,
+        container: Optional[str] = None
+    ) -> tuple[bool, str]:
+        """
+        Copy a file from local machine to a pod.
+
+        Args:
+            local_path: Local file path
+            pod_name: Target pod name
+            pod_path: Destination path inside the pod
+            container: Optional container name if pod has multiple containers
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        args = ["cp", local_path, f"{pod_name}:{pod_path}"]
+        if container:
+            args.extend(["-c", container])
+
+        result = self._run_kubectl(*args, timeout=300)  # 5 min timeout for large files
+        if result.returncode == 0:
+            return True, f"Copied {local_path} to {pod_name}:{pod_path}"
+        return False, result.stderr
+
+    def copy_from_pod(
+        self,
+        pod_name: str,
+        pod_path: str,
+        local_path: str,
+        container: Optional[str] = None
+    ) -> tuple[bool, str]:
+        """
+        Copy a file from a pod to local machine.
+
+        Args:
+            pod_name: Source pod name
+            pod_path: Source path inside the pod
+            local_path: Local destination path
+            container: Optional container name if pod has multiple containers
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        args = ["cp", f"{pod_name}:{pod_path}", local_path]
+        if container:
+            args.extend(["-c", container])
+
+        result = self._run_kubectl(*args, timeout=300)  # 5 min timeout for large files
+        if result.returncode == 0:
+            return True, f"Copied {pod_name}:{pod_path} to {local_path}"
+        return False, result.stderr

@@ -17,22 +17,38 @@ else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
     DATA_DIR = os.path.dirname(APP_DIR)  # Parent of streamlit-app
 
-# Paths
+# Local paths (where Streamlit app saves/reads files)
 INPUT_DIR = os.path.join(DATA_DIR, "input")
 OUTPUT_DIR = os.path.join(DATA_DIR, "output")
 TEMP_DIR = os.path.join(DATA_DIR, "tmp", "streamlit")
 YAML_TEMPLATE_DIR = os.path.join(APP_DIR, "k8s", "templates")
 
-# Input subdirectories
+# Input subdirectories (local)
 INPUT_VIDEOS_DIR = os.path.join(INPUT_DIR, "videos")
 INPUT_TEXTS_DIR = os.path.join(INPUT_DIR, "texts")
 INPUT_IMAGES_DIR = os.path.join(INPUT_DIR, "images")
 INPUT_AUDIO_DIR = os.path.join(INPUT_DIR, "audio")
 
-# Output subdirectories
+# Output subdirectories (local)
 OUTPUT_UPSCALED_DIR = os.path.join(OUTPUT_DIR, "upscaled")
 OUTPUT_AUDIO_DIR = os.path.join(OUTPUT_DIR, "audio")
 OUTPUT_TALKING_FACE_DIR = os.path.join(OUTPUT_DIR, "talking_face")
+
+# Pod paths - ALWAYS /data/... (what GPU pods see on the persistent volume)
+# These are used in YAML templates regardless of where the Streamlit app runs
+POD_DATA_DIR = "/data"
+POD_INPUT_DIR = "/data/input"
+POD_OUTPUT_DIR = "/data/output"
+POD_INPUT_VIDEOS_DIR = "/data/input/videos"
+POD_INPUT_TEXTS_DIR = "/data/input/texts"
+POD_INPUT_IMAGES_DIR = "/data/input/images"
+POD_INPUT_AUDIO_DIR = "/data/input/audio"
+POD_OUTPUT_UPSCALED_DIR = "/data/output/upscaled"
+POD_OUTPUT_AUDIO_DIR = "/data/output/audio"
+POD_OUTPUT_TALKING_FACE_DIR = "/data/output/talking_face"
+
+# Pod name for file transfers (the persistent volume shell pod)
+PERSISTENT_POD_NAME = "persistent-volume-shell"
 
 # Job settings
 POLL_INTERVAL_SECONDS = 5
