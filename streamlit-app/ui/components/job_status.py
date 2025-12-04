@@ -2,9 +2,13 @@
 
 import streamlit as st
 import os
+import time
 
 from job_manager.manager import JobManager, JobState
 from ui.common import format_timestamp, create_status_badge
+
+# Auto-refresh interval in seconds for running jobs
+AUTO_REFRESH_INTERVAL = 5
 
 
 def render_job_status_panel(model_filter: str = None):
@@ -18,6 +22,10 @@ def render_job_status_panel(model_filter: str = None):
 
     job_manager = JobManager()
 
+    # Initialize session state for log viewing
+    if "viewing_logs" not in st.session_state:
+        st.session_state.viewing_logs = set()
+
     # Get jobs
     if model_filter:
         jobs = job_manager.get_jobs_by_model(model_filter)
@@ -27,6 +35,13 @@ def render_job_status_panel(model_filter: str = None):
     if not jobs:
         st.info("No jobs found. Submit a job to get started.")
         return
+
+    # Check if any running jobs have logs being viewed (for auto-refresh)
+    has_running_with_logs = any(
+        job.job_id in st.session_state.viewing_logs
+        and job.get_state() in [JobState.QUEUED, JobState.RUNNING]
+        for job in jobs
+    )
 
     # Action buttons
     col1, col2, col3 = st.columns([1, 1, 2])
@@ -86,27 +101,52 @@ def render_job_status_panel(model_filter: str = None):
                         st.rerun()
 
             with btn_col2:
-                if st.button("View Logs", key=f"logs_{job.job_id}"):
-                    logs = job_manager.get_job_logs(job.job_id)
-                    if logs:
-                        st.code(logs, language="bash")
+                # Toggle logs viewing
+                is_viewing = job.job_id in st.session_state.viewing_logs
+                btn_label = "Hide Logs" if is_viewing else "View Logs"
+                if st.button(btn_label, key=f"logs_{job.job_id}"):
+                    if is_viewing:
+                        st.session_state.viewing_logs.discard(job.job_id)
                     else:
-                        st.info("No logs available")
+                        st.session_state.viewing_logs.add(job.job_id)
+                    st.rerun()
 
             with btn_col3:
                 if st.button("Delete", key=f"delete_{job.job_id}", type="secondary"):
+                    st.session_state.viewing_logs.discard(job.job_id)
                     job_manager.delete_job(job.job_id, delete_pod=True)
                     st.toast(f"Deleted job {job.job_id}")
                     st.rerun()
+
+            # Display logs in full width (outside columns)
+            if job.job_id in st.session_state.viewing_logs:
+                # Fetch and save logs
+                logs = job_manager.get_job_logs(job.job_id)
+
+                if state in [JobState.QUEUED, JobState.RUNNING]:
+                    st.caption(f"Auto-refreshing every {AUTO_REFRESH_INTERVAL}s...")
+
+                if logs:
+                    st.code(logs, language="bash")
+                else:
+                    st.info("No logs available yet")
 
             # Error message for failed jobs
             if state == JobState.FAILED and job.error_message:
                 st.error(f"**Error:** {job.error_message}")
 
-            # Cached logs
+            # Always show saved logs for completed/failed jobs (even if not actively viewing)
             if job.logs and state in [JobState.COMPLETED, JobState.FAILED]:
-                with st.expander("Execution Logs", expanded=False):
-                    st.code(job.logs, language="bash")
+                if job.job_id not in st.session_state.viewing_logs:
+                    with st.expander("Execution Logs", expanded=False):
+                        st.code(job.logs, language="bash")
+
+    # Auto-refresh for running jobs with logs being viewed
+    if has_running_with_logs:
+        time.sleep(AUTO_REFRESH_INTERVAL)
+        # Update job statuses before rerun
+        job_manager.update_all_active_jobs()
+        st.rerun()
 
 
 def render_compact_job_status(model_type: str):

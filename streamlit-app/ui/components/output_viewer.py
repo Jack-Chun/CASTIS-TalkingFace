@@ -107,12 +107,137 @@ def render_output_viewer(model_filter: str = None):
 
 
 def render_video_output(video_path: str, job):
-    """Render video output with player."""
-    try:
-        st.video(video_path)
-    except Exception as e:
-        st.error(f"Error playing video: {e}")
-        st.info("You can still download the file using the button below.")
+    """Render video output with player, showing input and output side by side."""
+    import base64
+
+    # Get input video path for comparison
+    input_video_path = job.input_files.get("video") if job.input_files else None
+
+    # Display videos side by side if input exists
+    if input_video_path and os.path.exists(input_video_path):
+        # Read video files and encode as base64 for HTML embedding
+        try:
+            with open(input_video_path, "rb") as f:
+                input_video_b64 = base64.b64encode(f.read()).decode()
+            with open(video_path, "rb") as f:
+                output_video_b64 = base64.b64encode(f.read()).decode()
+
+            # Get video mime type
+            input_ext = os.path.splitext(input_video_path)[1].lower()
+            output_ext = os.path.splitext(video_path)[1].lower()
+            input_mime = get_mime_type(input_ext)
+            output_mime = get_mime_type(output_ext)
+
+            # Unique ID for this comparison
+            comp_id = job.job_id.replace("-", "_")
+
+            # Custom HTML with synchronized playback
+            html_code = f"""
+            <style>
+                .video-comparison-{comp_id} {{
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }}
+                .video-row-{comp_id} {{
+                    display: flex;
+                    gap: 20px;
+                }}
+                .video-container-{comp_id} {{
+                    flex: 1;
+                }}
+                .video-container-{comp_id} video {{
+                    width: 100%;
+                    border-radius: 8px;
+                }}
+                .video-label-{comp_id} {{
+                    font-weight: bold;
+                    margin-bottom: 8px;
+                    color: #333;
+                }}
+                .control-btn-{comp_id} {{
+                    padding: 10px 24px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    margin-right: 8px;
+                    transition: background-color 0.2s;
+                }}
+                .play-btn-{comp_id} {{
+                    background-color: #ff4b4b;
+                    color: white;
+                }}
+                .play-btn-{comp_id}:hover {{
+                    background-color: #ff3333;
+                }}
+                .reset-btn-{comp_id} {{
+                    background-color: #f0f2f6;
+                    color: #333;
+                }}
+                .reset-btn-{comp_id}:hover {{
+                    background-color: #e0e2e6;
+                }}
+            </style>
+            <div class="video-comparison-{comp_id}">
+                <div>
+                    <button class="control-btn-{comp_id} play-btn-{comp_id}" onclick="playBoth_{comp_id}()">Play Both</button>
+                    <button class="control-btn-{comp_id} reset-btn-{comp_id}" onclick="resetBoth_{comp_id}()">Reset</button>
+                </div>
+                <div class="video-row-{comp_id}">
+                    <div class="video-container-{comp_id}">
+                        <div class="video-label-{comp_id}">Input Video</div>
+                        <video id="input_{comp_id}" controls>
+                            <source src="data:{input_mime};base64,{input_video_b64}" type="{input_mime}">
+                        </video>
+                    </div>
+                    <div class="video-container-{comp_id}">
+                        <div class="video-label-{comp_id}">Output Video</div>
+                        <video id="output_{comp_id}" controls>
+                            <source src="data:{output_mime};base64,{output_video_b64}" type="{output_mime}">
+                        </video>
+                    </div>
+                </div>
+            </div>
+            <script>
+                function playBoth_{comp_id}() {{
+                    var input = document.getElementById('input_{comp_id}');
+                    var output = document.getElementById('output_{comp_id}');
+                    input.currentTime = 0;
+                    output.currentTime = 0;
+                    input.play();
+                    output.play();
+                }}
+                function resetBoth_{comp_id}() {{
+                    var input = document.getElementById('input_{comp_id}');
+                    var output = document.getElementById('output_{comp_id}');
+                    input.pause();
+                    output.pause();
+                    input.currentTime = 0;
+                    output.currentTime = 0;
+                }}
+            </script>
+            """
+            st.components.v1.html(html_code, height=650, scrolling=True)
+
+        except Exception as e:
+            st.error(f"Error loading videos for comparison: {e}")
+            # Fallback to regular display
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Input Video**")
+                st.video(input_video_path)
+            with col2:
+                st.markdown("**Output Video**")
+                st.video(video_path)
+    else:
+        # Just show output video if input not available
+        try:
+            st.video(video_path)
+        except Exception as e:
+            st.error(f"Error playing video: {e}")
+            st.info("You can still download the file using the button below.")
 
 
 def render_audio_output(audio_path: str, job):

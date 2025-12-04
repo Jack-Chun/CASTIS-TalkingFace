@@ -235,15 +235,27 @@ class JobManager:
         jobs = self._load_jobs()
         return [j for j in jobs.values() if j.model_type == model_type]
 
-    def get_job_logs(self, job_id: str) -> Optional[str]:
-        """Get logs for a specific job."""
-        job = self.get_job(job_id)
+    def get_job_logs(self, job_id: str, force_refresh: bool = False) -> Optional[str]:
+        """Get logs for a specific job and save them permanently."""
+        jobs = self._load_jobs()
+        job = jobs.get(job_id)
         if not job:
             return None
 
-        # If we have cached logs, return them
-        if job.logs:
+        state = job.get_state()
+
+        # For completed/failed jobs, return cached logs if available (unless force refresh)
+        if state in [JobState.COMPLETED, JobState.FAILED] and job.logs and not force_refresh:
             return job.logs
 
-        # Otherwise fetch fresh logs
-        return self.k8s_client.get_pod_logs(job.pod_name)
+        # Fetch fresh logs from pod
+        fresh_logs = self.k8s_client.get_pod_logs(job.pod_name)
+
+        # Save logs to job (append for running jobs, replace for others)
+        if fresh_logs:
+            job.logs = fresh_logs
+            job.updated_at = datetime.now().isoformat()
+            jobs[job_id] = job
+            self._save_jobs(jobs)
+
+        return fresh_logs or job.logs
