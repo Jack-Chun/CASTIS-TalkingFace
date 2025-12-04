@@ -1,13 +1,26 @@
 """Configuration for the GPU Model Runner Streamlit App."""
 
 import os
+import shutil
+
+# Auto-detect environment: pod vs local
+# Check if this config file itself is located under /data/ (pod environment)
+# This avoids issues with /data existing as a read-only system dir on macOS
+IS_POD_ENV = os.path.abspath(__file__).startswith("/data/")
+
+if IS_POD_ENV:
+    # Running inside the Kubernetes pod
+    DATA_DIR = "/data"
+    APP_DIR = os.path.join(DATA_DIR, "streamlit-app")
+else:
+    # Running locally - use relative paths from the app directory
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.dirname(APP_DIR)  # Parent of streamlit-app
 
 # Paths
-DATA_DIR = "/data"
 INPUT_DIR = os.path.join(DATA_DIR, "input")
 OUTPUT_DIR = os.path.join(DATA_DIR, "output")
 TEMP_DIR = os.path.join(DATA_DIR, "tmp", "streamlit")
-APP_DIR = os.path.join(DATA_DIR, "streamlit-app")
 YAML_TEMPLATE_DIR = os.path.join(APP_DIR, "k8s", "templates")
 
 # Input subdirectories
@@ -26,17 +39,19 @@ POLL_INTERVAL_SECONDS = 5
 MAX_POLL_ATTEMPTS = 720  # 1 hour max
 JOBS_FILE = os.path.join(APP_DIR, "jobs.json")
 
-# kubectl settings
-KUBECTL_PATH = os.path.join(DATA_DIR, "bin", "kubectl")
+# kubectl settings - find kubectl in PATH or use pod path
+KUBECTL_PATH = shutil.which("kubectl") or os.path.join(DATA_DIR, "bin", "kubectl")
 
 # Model registry
+# Note: Model directories point to /data paths on the pod where models run
+# Local machine doesn't need these directories - it just submits jobs to the cluster
 MODELS = {
     "realesrgan": {
         "id": "realesrgan",
         "name": "Real-ESRGAN",
         "description": "Video/image upscaling (4x super-resolution)",
-        "dir": os.path.join(DATA_DIR, "Real-ESRGAN"),
-        "venv": os.path.join(DATA_DIR, "realesrgan-venv"),
+        "dir": "/data/Real-ESRGAN",  # Always /data path (where GPU pod runs)
+        "venv": "/data/realesrgan-venv",
         "enabled": True,
         "template": "realesrgan.yaml",
         "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",
@@ -47,8 +62,8 @@ MODELS = {
         "id": "chatterbox",
         "name": "Chatterbox TTS",
         "description": "Text-to-Speech generation",
-        "dir": os.path.join(DATA_DIR, "Chatterbox"),
-        "venv": os.path.join(DATA_DIR, "chatterbox-venv"),
+        "dir": "/data/Chatterbox",
+        "venv": "/data/chatterbox-venv",
         "enabled": False,  # Disabled until repo is added
         "template": "chatterbox.yaml",
         "image": "TBD",
@@ -59,8 +74,8 @@ MODELS = {
         "id": "stableavatar",
         "name": "StableAvatar",
         "description": "Talking face video generation (image + audio)",
-        "dir": os.path.join(DATA_DIR, "StableAvatar"),
-        "venv": os.path.join(DATA_DIR, "stableavatar-venv"),
+        "dir": "/data/StableAvatar",
+        "venv": "/data/stableavatar-venv",
         "enabled": False,  # Disabled until repo is added
         "template": "stableavatar.yaml",
         "image": "TBD",
@@ -81,10 +96,18 @@ def get_model_config(model_id: str) -> dict:
 
 
 def is_model_available(model_id: str) -> bool:
-    """Check if a model is both enabled and has its directory present."""
+    """
+    Check if a model is enabled.
+
+    Note: When running locally, we can't check if the model directory exists
+    on the pod, so we just check if it's enabled in config.
+    """
     config = MODELS.get(model_id)
     if not config:
         return False
     if not config["enabled"]:
         return False
+    # When running locally, assume model is available if enabled
+    if not IS_POD_ENV:
+        return True
     return os.path.isdir(config["dir"])
