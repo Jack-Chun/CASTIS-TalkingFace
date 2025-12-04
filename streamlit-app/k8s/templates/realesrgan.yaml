@@ -32,64 +32,54 @@ spec:
           INPUT_VIDEO="${INPUT_VIDEO}"
           OUTPUT_VIDEO="${OUTPUT_VIDEO}"
           SCALE=${SCALE}
-          FRAMES_DIR="/data/tmp/${JOB_ID}/frames"
-          UPSCALED_DIR="/data/tmp/${JOB_ID}/frames_upscaled"
+          OUTPUT_DIR=$(dirname "${OUTPUT_VIDEO}")
+          OUTPUT_BASENAME=$(basename "${OUTPUT_VIDEO}" .mp4)
 
-          rm -rf ${FRAMES_DIR} ${UPSCALED_DIR}
-          mkdir -p ${FRAMES_DIR} ${UPSCALED_DIR}
+          mkdir -p "${OUTPUT_DIR}"
 
           echo "=== Real-ESRGAN Video Upscaling ==="
           echo "Input: ${INPUT_VIDEO}"
           echo "Output: ${OUTPUT_VIDEO}"
           echo "Scale: ${SCALE}x"
 
-          # Step 1: Extract frames from video
-          echo "Step 1: Extracting frames from video..."
-          FRAMERATE=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 -show_entries stream=r_frame_rate "${INPUT_VIDEO}" | head -1)
-          ffmpeg -i "${INPUT_VIDEO}" "${FRAMES_DIR}/frame_%04d.png"
-          FRAME_COUNT=$(ls "${FRAMES_DIR}"/*.png 2>/dev/null | wc -l)
-          echo "Extracted ${FRAME_COUNT} frames at ${FRAMERATE} fps"
+          # Get input video info
+          echo "Input video info:"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=noprint_wrappers=1 "${INPUT_VIDEO}"
 
-          if [ "${FRAME_COUNT}" -eq 0 ]; then
-            echo "ERROR: No frames extracted!"
-            exit 1
-          fi
-
-          # Step 2: Upscale frames with Real-ESRGAN
-          echo "Step 2: Upscaling ${FRAME_COUNT} frames with Real-ESRGAN (${SCALE}x)..."
+          # Use the dedicated video inference script
+          # This handles frame extraction, processing, and reassembly automatically
+          # with proper framerate preservation and audio sync
           cd /data/Real-ESRGAN
-          python inference_realesrgan.py \
+          python inference_realesrgan_video.py \
+            -i "${INPUT_VIDEO}" \
+            -o "${OUTPUT_DIR}" \
             -n RealESRGAN_x${SCALE}plus \
-            -i "${FRAMES_DIR}" \
-            -o "${UPSCALED_DIR}" \
             -s ${SCALE} \
-            --suffix '' \
+            --suffix "${OUTPUT_BASENAME}" \
             ${FP32_FLAG}
 
-          UPSCALED_COUNT=$(ls "${UPSCALED_DIR}"/*.png 2>/dev/null | wc -l)
-          echo "Upscaled ${UPSCALED_COUNT} frames"
+          # The output file is named: {input_basename}_{suffix}.mp4
+          INPUT_BASENAME=$(basename "${INPUT_VIDEO}" .mp4)
+          GENERATED_OUTPUT="${OUTPUT_DIR}/${INPUT_BASENAME}_${OUTPUT_BASENAME}.mp4"
 
-          if [ "${UPSCALED_COUNT}" -eq 0 ]; then
-            echo "ERROR: No frames upscaled!"
-            exit 1
+          # Rename to expected output path if different
+          if [ -f "${GENERATED_OUTPUT}" ] && [ "${GENERATED_OUTPUT}" != "${OUTPUT_VIDEO}" ]; then
+            mv "${GENERATED_OUTPUT}" "${OUTPUT_VIDEO}"
           fi
 
-          # Step 3: Reassemble video from upscaled frames
-          echo "Step 3: Reassembling video from upscaled frames..."
-          ffmpeg -y -framerate ${FRAMERATE} -i "${UPSCALED_DIR}/frame_%04d.png" \
-            -i "${INPUT_VIDEO}" \
-            -map 0:v -map 1:a? \
-            -c:v libx264 -crf 18 -preset slower -profile:v high \
-            -c:a copy \
-            -pix_fmt yuv420p \
-            "${OUTPUT_VIDEO}"
-
-          # Cleanup temp frames
-          rm -rf "/data/tmp/${JOB_ID}"
+          # Verify output exists
+          if [ ! -f "${OUTPUT_VIDEO}" ]; then
+            echo "ERROR: Output video not created!"
+            # List what was created in output dir
+            echo "Files in output directory:"
+            ls -la "${OUTPUT_DIR}/"
+            exit 1
+          fi
 
           # Get output video info
           echo "=== Video upscaling complete! ==="
-          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "${OUTPUT_VIDEO}"
+          echo "Output video info:"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=noprint_wrappers=1 "${OUTPUT_VIDEO}"
           echo "Output file: ${OUTPUT_VIDEO}"
           ls -lh "${OUTPUT_VIDEO}"
 
