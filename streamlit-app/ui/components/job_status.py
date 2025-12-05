@@ -2,7 +2,8 @@
 
 import streamlit as st
 import os
-import time
+import html
+from datetime import timedelta
 
 from job_manager.manager import JobManager, JobState
 from ui.common import format_timestamp, create_status_badge
@@ -10,10 +11,40 @@ from ui.common import format_timestamp, create_status_badge
 # Auto-refresh interval in seconds for running jobs
 AUTO_REFRESH_INTERVAL = 5
 
+# Max height for log container in pixels
+LOG_MAX_HEIGHT = 400
 
+
+def render_scrollable_logs(logs: str, key: str):
+    """Render logs in a scrollable container with fixed max height."""
+    escaped_logs = html.escape(logs)
+    st.markdown(
+        f"""
+        <div style="
+            max-height: {LOG_MAX_HEIGHT}px;
+            overflow-y: auto;
+            background-color: #0e1117;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #fafafa;
+        ">
+<pre style="margin: 0; background: transparent; color: inherit;">{escaped_logs}</pre>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+@st.fragment(run_every=timedelta(seconds=AUTO_REFRESH_INTERVAL))
 def render_job_status_panel(model_filter: str = None):
     """
     Render the job status panel showing all jobs.
+    Uses @st.fragment with run_every to auto-refresh without affecting other page sections.
 
     Args:
         model_filter: Optional model type to filter jobs by
@@ -26,22 +57,18 @@ def render_job_status_panel(model_filter: str = None):
     if "viewing_logs" not in st.session_state:
         st.session_state.viewing_logs = set()
 
-    # Get jobs
+    # Get jobs and update active ones
     if model_filter:
         jobs = job_manager.get_jobs_by_model(model_filter)
     else:
         jobs = job_manager.get_all_jobs()
 
+    # Auto-update active jobs on each refresh
+    job_manager.update_all_active_jobs()
+
     if not jobs:
         st.info("No jobs found. Submit a job to get started.")
         return
-
-    # Check if any running jobs have logs being viewed (for auto-refresh)
-    has_running_with_logs = any(
-        job.job_id in st.session_state.viewing_logs
-        and job.get_state() in [JobState.QUEUED, JobState.RUNNING]
-        for job in jobs
-    )
 
     # Action buttons
     col1, col2, col3 = st.columns([1, 1, 2])
@@ -123,30 +150,14 @@ def render_job_status_panel(model_filter: str = None):
                 # Fetch and save logs
                 logs = job_manager.get_job_logs(job.job_id)
 
-                if state in [JobState.QUEUED, JobState.RUNNING]:
-                    st.caption(f"Auto-refreshing every {AUTO_REFRESH_INTERVAL}s...")
-
                 if logs:
-                    st.code(logs, language="bash")
+                    render_scrollable_logs(logs, key=f"logs_view_{job.job_id}")
                 else:
                     st.info("No logs available yet")
 
             # Error message for failed jobs
             if state == JobState.FAILED and job.error_message:
                 st.error(f"**Error:** {job.error_message}")
-
-            # Always show saved logs for completed/failed jobs (even if not actively viewing)
-            if job.logs and state in [JobState.COMPLETED, JobState.FAILED]:
-                if job.job_id not in st.session_state.viewing_logs:
-                    with st.expander("Execution Logs", expanded=False):
-                        st.code(job.logs, language="bash")
-
-    # Auto-refresh for running jobs with logs being viewed
-    if has_running_with_logs:
-        time.sleep(AUTO_REFRESH_INTERVAL)
-        # Update job statuses before rerun
-        job_manager.update_all_active_jobs()
-        st.rerun()
 
 
 def render_compact_job_status(model_type: str):
