@@ -24,17 +24,16 @@ from ui.components.job_status import render_job_status_panel, render_compact_job
 def render_evaluators_page():
     """Render the evaluators page with tabs for different evaluation tools."""
     st.header("Evaluators")
-    st.markdown("Evaluate the quality of generated outputs")
 
     # Create tabs for different evaluators
-    tab_names = ["Lip Sync (SyncNet)", "TTS Quality (MOS + WER)"]
+    tab_names = ["TTS Quality (MOS + WER)", "Lip Sync Quality (SyncNet)"]
     tabs = st.tabs(tab_names)
 
     with tabs[0]:
-        render_syncnet_tab()
+        render_tts_evaluator_tab()
 
     with tabs[1]:
-        render_tts_evaluator_tab()
+        render_syncnet_tab()
 
 
 def render_syncnet_tab():
