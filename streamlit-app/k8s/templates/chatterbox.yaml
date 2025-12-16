@@ -39,7 +39,7 @@ spec:
           echo "Started at: $(date)"
 
           source /data/chatterbox-venv/bin/activate
-          cd /data/chatterbox
+          cd /data/Chatterbox_Finetuning
 
           # Show GPU info
           echo "=== GPU Info ==="
@@ -54,7 +54,7 @@ spec:
             --voice-prompt "${VOICE_PROMPT}" \
             --exaggeration ${EXAGGERATION} \
             --cfg-weight ${CFG_WEIGHT} \
-            --checkpoint /data/chatterbox/final.pt
+            --checkpoint /data/Chatterbox_Finetuning/final.pt
 
           echo "=== Inference Complete ==="
           echo "Output saved to: ${OUTPUT_AUDIO}"

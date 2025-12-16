@@ -40,7 +40,7 @@ spec:
           echo "Started at: $(date)"
 
           source /data/chatterbox-venv/bin/activate
-          cd /data/chatterbox
+          cd /data/Chatterbox_Finetuning
 
           # Show GPU info
           echo "=== GPU Info ==="

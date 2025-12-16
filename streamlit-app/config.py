@@ -77,8 +77,8 @@ MODELS = {
     "chatterbox": {
         "id": "chatterbox",
         "name": "Chatterbox TTS",
-        "description": "Text-to-Speech generation with voice cloning",
-        "dir": "/data/chatterbox",
+        "description": "Text-to-Speech generation with voice cloning (Korean finetuned)",
+        "dir": "/data/Chatterbox_Finetuning",
         "venv": "/data/chatterbox-venv",
         "enabled": True,
         "template": "chatterbox.yaml",
@@ -108,6 +108,18 @@ MODELS = {
         "template": "syncnet.yaml",
         "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",  # Uses existing image (has ffmpeg)
         "input_type": "video",
+        "output_type": "evaluation",
+    },
+    "chatterbox_eval": {
+        "id": "chatterbox_eval",
+        "name": "TTS Evaluator",
+        "description": "TTS quality evaluation (MOS and WER)",
+        "dir": "/data/Chatterbox_Evaluation",
+        "venv": "/data/chatterbox-eval-venv",
+        "enabled": True,
+        "template": "chatterbox_eval.yaml",
+        "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",
+        "input_type": "audio",
         "output_type": "evaluation",
     },
 }

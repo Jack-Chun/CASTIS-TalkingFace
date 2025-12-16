@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD_NAME}
+  labels:
+    app: gpu-model-runner
+    model: chatterbox-eval
+    job-id: ${JOB_ID}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: gpu-worker
+      image: ${IMAGE}
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/python/bin:/data/chatterbox-eval-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: HF_HOME
+          value: /data/.cache/huggingface
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "=== Chatterbox TTS Evaluation ==="
+          echo "Job ID: ${JOB_ID}"
+          echo "Audio Directory: ${INPUT_AUDIO_DIR}"
+          echo "Whisper Model: ${WHISPER_MODEL}"
+          echo "Language: ${LANGUAGE}"
+          echo "Started at: $(date)"
+
+          source /data/chatterbox-eval-venv/bin/activate
+          cd /data/Chatterbox_Evaluation
+
+          # Show GPU info
+          echo "=== GPU Info ==="
+          nvidia-smi
+
+          # Run evaluation
+          echo "=== Running TTS Evaluation ==="
+          python eval_tts_folder.py \
+            --audio_dir "${INPUT_AUDIO_DIR}" \
+            --whisper_model "${WHISPER_MODEL}" \
+            --language "${LANGUAGE}"
+
+          echo "=== Evaluation Complete ==="
+          echo "Results saved to: ${INPUT_AUDIO_DIR}/tts_eval_results.csv"
+
+          # Copy results to output directory for easier access
+          mkdir -p "${OUTPUT_DIR}"
+          cp "${INPUT_AUDIO_DIR}/tts_eval_results.csv" "${OUTPUT_DIR}/tts_eval_results.csv"
+
+          echo "Finished at: $(date)"
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data

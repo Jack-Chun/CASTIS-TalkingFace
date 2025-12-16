@@ -189,7 +189,7 @@ class ChatterboxModel(BaseModelRunner):
         voice_prompt_path = config.model_params.get("voice_prompt_path", "")
         if not voice_prompt_path:
             # Use default prompt if available
-            voice_prompt_path = "/data/chatterbox/prompt.wav"
+            voice_prompt_path = "/data/Chatterbox_Finetuning/voice_sample.wav"
 
         # Extract base job_id (remove _vanilla suffix if present for vanilla jobs)
         base_job_id = config.job_id.replace("_vanilla", "")
