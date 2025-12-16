@@ -83,7 +83,7 @@ class ChatterboxEvalModel(BaseModelRunner):
         else:
             # Show uploaded files with preview and remove button (consistent with other models)
             audio_files = st.session_state.tts_eval_audio_files
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 # Show first file preview, then list others
                 if len(audio_files) == 1:
@@ -115,7 +115,7 @@ class ChatterboxEvalModel(BaseModelRunner):
         else:
             # Show uploaded text files with remove button (consistent with other models)
             text_files = st.session_state.tts_eval_text_files
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 file_list = ", ".join(f.name for f in text_files[:3])
                 if len(text_files) > 3:

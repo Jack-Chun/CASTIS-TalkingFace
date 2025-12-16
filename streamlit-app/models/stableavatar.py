@@ -82,9 +82,9 @@ class StableAvatarModel(BaseModelRunner):
         else:
             # Show preview and remove button
             image_file = st.session_state.stableavatar_image
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
-                st.image(image_file, caption=image_file.name, width=600)
+                st.image(image_file, caption=image_file.name, width=350)
             with col2:
                 if st.button("Remove", key="remove_image"):
                     st.session_state.stableavatar_image = None
@@ -107,7 +107,7 @@ class StableAvatarModel(BaseModelRunner):
         else:
             # Show preview and remove button
             audio_file = st.session_state.stableavatar_audio
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.audio(audio_file)
                 st.caption(audio_file.name)

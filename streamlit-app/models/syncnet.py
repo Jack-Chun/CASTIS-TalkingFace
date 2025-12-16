@@ -75,7 +75,7 @@ class SyncNetModel(BaseModelRunner):
         else:
             # Show preview and remove button
             video_file = st.session_state.syncnet_video
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.video(video_file)
                 st.caption(f"{video_file.name} ({video_file.size / 1024 / 1024:.2f} MB)")

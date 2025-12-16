@@ -468,6 +468,8 @@ def render_job_status_panel(model_filter: str = None):
     Args:
         model_filter: Optional model type to filter jobs by
     """
+    st.subheader("Job Status")
+
     job_manager = JobManager()
 
     # Create a unique key prefix based on model_filter to avoid duplicate keys
@@ -498,24 +500,6 @@ def render_job_status_panel(model_filter: str = None):
     if not jobs:
         st.info("No jobs found. Submit a job to get started.")
         return
-
-    # Action buttons
-    col1, col2, col3 = st.columns([4, 1, 1], vertical_alignment="bottom")
-
-    with col1:
-        st.subheader("Job Status")
-    
-    with col2:
-        if st.button("Refresh All", key=f"{key_prefix}refresh_all_jobs"):
-            job_manager.update_all_active_jobs()
-            st.rerun()
-
-    with col3:
-        if st.button("Clear Completed", key=f"{key_prefix}clear_completed"):
-            count = job_manager.cleanup_completed_jobs()
-            if count > 0:
-                st.toast(f"Cleared {count} completed jobs")
-                st.rerun()
 
     # Display jobs
     for job in jobs:

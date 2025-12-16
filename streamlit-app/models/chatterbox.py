@@ -104,7 +104,7 @@ class ChatterboxModel(BaseModelRunner):
         else:
             # Show preview and remove button (consistent with StableAvatar pattern)
             voice_file = st.session_state.chatterbox_voice_prompt
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.audio(voice_file)
                 st.caption(voice_file.name)

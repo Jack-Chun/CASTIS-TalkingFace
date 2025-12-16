@@ -75,7 +75,7 @@ class RealESRGANModel(BaseModelRunner):
         else:
             # Show preview and remove button
             uploaded_file = st.session_state.realesrgan_video
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.video(uploaded_file)
                 st.caption(f"{uploaded_file.name} ({uploaded_file.size / 1024 / 1024:.2f} MB)")
