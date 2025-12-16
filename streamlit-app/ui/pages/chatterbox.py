@@ -2,11 +2,13 @@
 
 import streamlit as st
 import os
+import subprocess
 
 from models.chatterbox import ChatterboxModel
 from models.base import JobConfig
 from job_manager.manager import JobManager
 from k8s.client import KubernetesClient
+from config import IS_POD_ENV, PERSISTENT_POD_NAME, POD_INPUT_TEXTS_DIR, POD_INPUT_AUDIO_DIR
 from ui.common import (
     generate_job_id,
     generate_pod_name,
@@ -16,6 +18,36 @@ from ui.common import (
 )
 from ui.components.job_status import render_job_status_panel, render_compact_job_status
 from ui.components.output_viewer import render_output_viewer
+
+
+def copy_files_to_pod(job_id: str, text_path: str, voice_path: str = None, voice_name: str = None):
+    """Copy input files to the persistent volume pod when running locally."""
+    k8s = KubernetesClient()
+
+    # Create directories on the pod
+    pod_text_dir = f"{POD_INPUT_TEXTS_DIR}/{job_id}"
+    mkdir_cmd = [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--", "mkdir", "-p", pod_text_dir]
+
+    if voice_path and voice_name:
+        pod_audio_dir = f"{POD_INPUT_AUDIO_DIR}/{job_id}"
+        mkdir_cmd = [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--", "mkdir", "-p", pod_text_dir, pod_audio_dir]
+
+    result = subprocess.run(mkdir_cmd, capture_output=True, timeout=30, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to create directories on pod: {result.stderr}")
+
+    # Copy text file
+    pod_text_path = f"{pod_text_dir}/input.txt"
+    success, msg = k8s.copy_to_pod(text_path, PERSISTENT_POD_NAME, pod_text_path)
+    if not success:
+        raise RuntimeError(f"Failed to copy text file to pod: {msg}")
+
+    # Copy voice file if provided
+    if voice_path and voice_name:
+        pod_voice_path = f"{POD_INPUT_AUDIO_DIR}/{job_id}/{voice_name}"
+        success, msg = k8s.copy_to_pod(voice_path, PERSISTENT_POD_NAME, pod_voice_path)
+        if not success:
+            raise RuntimeError(f"Failed to copy voice file to pod: {msg}")
 
 
 def render_chatterbox_page():
@@ -105,26 +137,31 @@ def submit_chatterbox_job(model: ChatterboxModel, inputs: dict):
         job_id = generate_job_id(model.model_id)
         pod_name = generate_pod_name(model.model_id, job_id)
 
-        # Save text input
+        # Save text input locally
         text = inputs["params"]["text"]
-        text_path = model.save_text_input(text, job_id)
+        local_text_path = model.save_text_input(text, job_id)
 
-        input_files = {"text": text_path}
+        input_files = {"text": local_text_path}
         params = inputs["params"].copy()
 
         # Handle voice prompt if provided
         voice_prompt_data = inputs["files"].get("voice_prompt")
         voice_prompt_name = inputs["files"].get("voice_prompt_name")
 
+        local_voice_path = None
         if voice_prompt_data and voice_prompt_name:
-            # Save voice prompt file
-            voice_path = model.save_voice_prompt(voice_prompt_data, voice_prompt_name, job_id)
-            input_files["voice_prompt"] = voice_path
+            # Save voice prompt file locally
+            local_voice_path = model.save_voice_prompt(voice_prompt_data, voice_prompt_name, job_id)
+            input_files["voice_prompt"] = local_voice_path
             # Add pod path to params for YAML generation
             params["voice_prompt_path"] = model.get_pod_voice_prompt_path(job_id, voice_prompt_name)
         else:
             # Use default prompt
             params["voice_prompt_path"] = "/data/chatterbox/prompt.wav"
+
+        # If running locally, copy files to persistent volume pod
+        if not IS_POD_ENV:
+            copy_files_to_pod(job_id, local_text_path, local_voice_path, voice_prompt_name)
 
         # Calculate output path
         output_path = model.get_output_path(job_id, input_files)
