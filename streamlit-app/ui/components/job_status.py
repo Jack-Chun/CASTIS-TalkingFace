@@ -53,6 +53,10 @@ def render_job_status_panel(model_filter: str = None):
 
     job_manager = JobManager()
 
+    # Create a unique key prefix based on model_filter to avoid duplicate keys
+    # when this component is rendered multiple times on the same page
+    key_prefix = f"{model_filter or 'all'}_"
+
     # Initialize session state for log viewing
     if "viewing_logs" not in st.session_state:
         st.session_state.viewing_logs = set()
@@ -80,12 +84,12 @@ def render_job_status_panel(model_filter: str = None):
     col1, col2, col3 = st.columns([1, 1, 2])
 
     with col1:
-        if st.button("Refresh All", key="refresh_all_jobs"):
+        if st.button("Refresh All", key=f"{key_prefix}refresh_all_jobs"):
             job_manager.update_all_active_jobs()
             st.rerun()
 
     with col2:
-        if st.button("Clear Completed", key="clear_completed"):
+        if st.button("Clear Completed", key=f"{key_prefix}clear_completed"):
             count = job_manager.cleanup_completed_jobs()
             if count > 0:
                 st.toast(f"Cleared {count} completed jobs")
