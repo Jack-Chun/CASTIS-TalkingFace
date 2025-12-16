@@ -127,12 +127,15 @@ class StableAvatarModel(BaseModelRunner):
             help="Number of diffusion steps. Higher = better quality but slower. Default: 50"
         )
 
-        st.subheader("Comparison Mode")
+        st.subheader("Model Selection")
 
-        compare_with_vanilla = st.checkbox(
-            "Compare with vanilla model (no LoRA)",
-            value=False,
-            help="Run both LoRA fine-tuned and vanilla models concurrently to compare results side by side"
+        use_vanilla = st.radio(
+            "Model Type",
+            options=["finetuned", "vanilla"],
+            index=0,
+            format_func=lambda x: "LoRA Fine-tuned" if x == "finetuned" else "Vanilla (No LoRA)",
+            help="Choose between the LoRA fine-tuned model or the vanilla model",
+            horizontal=True,
         )
 
         # Get files from session state
@@ -149,7 +152,7 @@ class StableAvatarModel(BaseModelRunner):
             },
             "params": {
                 "inference_steps": inference_steps,
-                "compare_with_vanilla": compare_with_vanilla,
+                "use_vanilla": use_vanilla == "vanilla",
             }
         }
 

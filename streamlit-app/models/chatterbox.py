@@ -152,12 +152,15 @@ class ChatterboxModel(BaseModelRunner):
                 help="Classifier-free guidance weight for voice matching"
             )
 
-        st.subheader("Comparison Mode")
+        st.subheader("Model Selection")
 
-        compare_with_vanilla = st.checkbox(
-            "Compare with vanilla model (no finetuning)",
-            value=False,
-            help="Run both finetuned and vanilla models to compare results side by side"
+        use_vanilla = st.radio(
+            "Model Type",
+            options=["finetuned", "vanilla"],
+            index=0,
+            format_func=lambda x: "Finetuned (Korean optimized)" if x == "finetuned" else "Vanilla (No finetuning)",
+            help="Choose between the finetuned model (optimized for Korean) or the vanilla model",
+            horizontal=True,
         )
 
         if not text_input or not text_input.strip():
@@ -172,7 +175,7 @@ class ChatterboxModel(BaseModelRunner):
                 "language": language,
                 "exaggeration": exaggeration,
                 "cfg_weight": cfg_weight,
-                "compare_with_vanilla": compare_with_vanilla,
+                "use_vanilla": use_vanilla == "vanilla",
             }
         }
 

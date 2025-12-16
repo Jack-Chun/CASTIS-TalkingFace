@@ -2,15 +2,12 @@
 
 import streamlit as st
 import os
-import json
-import pandas as pd
 
 from models.syncnet import SyncNetModel
 from models.chatterbox_eval import ChatterboxEvalModel
 from models.base import JobConfig
-from job_manager.manager import JobManager, JobState
+from job_manager.manager import JobManager
 from k8s.client import KubernetesClient
-from config import IS_POD_ENV, PERSISTENT_POD_NAME, MODELS
 from ui.common import (
     generate_job_id,
     generate_pod_name,
@@ -38,7 +35,6 @@ def render_evaluators_page():
 
 def render_syncnet_tab():
     """Render the SyncNet lip sync evaluation tab."""
-    st.subheader("SyncNet Lip Sync Evaluation")
     st.markdown("Evaluate the lip sync quality of talking face videos")
 
     model = SyncNetModel()
@@ -54,7 +50,7 @@ def render_syncnet_tab():
     st.divider()
 
     # Two-column layout
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 2])
 
     with col1:
         # Input UI
@@ -80,14 +76,9 @@ def render_syncnet_tab():
         # Job status for this model
         render_job_status_panel(model_filter="syncnet")
 
-    # Results section
-    st.divider()
-    render_syncnet_results()
-
 
 def render_tts_evaluator_tab():
     """Render the TTS quality evaluation tab."""
-    st.subheader("TTS Quality Evaluation")
     st.markdown("Evaluate TTS audio quality using MOS (Mean Opinion Score) and WER (Word Error Rate)")
 
     model = ChatterboxEvalModel()
@@ -103,7 +94,7 @@ def render_tts_evaluator_tab():
     st.divider()
 
     # Two-column layout
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 2])
 
     with col1:
         # Input UI
@@ -128,10 +119,6 @@ def render_tts_evaluator_tab():
     with col2:
         # Job status for this model
         render_job_status_panel(model_filter="chatterbox_eval")
-
-    # Results section
-    st.divider()
-    render_tts_eval_results()
 
 
 def submit_syncnet_job(model: SyncNetModel, inputs: dict):
@@ -201,126 +188,6 @@ def submit_syncnet_job(model: SyncNetModel, inputs: dict):
 
     except Exception as e:
         show_error_toast(f"Error submitting job: {str(e)}")
-
-
-def render_syncnet_results():
-    """Render evaluation results for completed SyncNet jobs."""
-    st.subheader("Evaluation Results")
-
-    job_manager = JobManager()
-    all_jobs = job_manager.get_jobs_by_model("syncnet")
-    completed_jobs = [j for j in all_jobs if j.get_state() == JobState.COMPLETED]
-
-    if not completed_jobs:
-        st.info("No completed evaluations yet. Submit a video to see results here.")
-        return
-
-    for job in completed_jobs:
-        output_path = job.output_file
-        local_output_dir = job.model_params.get("local_output_dir", os.path.dirname(output_path))
-
-        # The actual SyncNet results are in pywork/evaluation_syncnet/syncnet_summary.json
-        actual_results_path = os.path.join(local_output_dir, "pywork", "evaluation_syncnet", "syncnet_summary.json")
-
-        # Try to fetch results from pod if running locally
-        if not os.path.exists(actual_results_path) and not IS_POD_ENV:
-            pod_output_dir = job.model_params.get("output_pod_dir")
-            if pod_output_dir:
-                try:
-                    k8s = KubernetesClient()
-                    os.makedirs(local_output_dir, exist_ok=True)
-                    # Copy the entire output directory
-                    k8s.copy_from_pod(
-                        PERSISTENT_POD_NAME,
-                        pod_output_dir,
-                        local_output_dir
-                    )
-                except Exception:
-                    pass
-
-        with st.expander(f"**Job: {job.job_id}**", expanded=True):
-            # Try to read the summary JSON from the correct location
-            results = None
-
-            # First, try the actual SyncNet output location
-            if os.path.exists(actual_results_path):
-                try:
-                    with open(actual_results_path, 'r') as f:
-                        results = json.load(f)
-                except (json.JSONDecodeError, Exception):
-                    pass
-
-            # Fallback to the root output path
-            if results is None and os.path.exists(output_path):
-                try:
-                    with open(output_path, 'r') as f:
-                        results = json.load(f)
-                        # Check if it's the fallback "no data" file
-                        if results.get("status") == "completed" and "av_offset" not in results:
-                            results = None
-                except (json.JSONDecodeError, Exception):
-                    pass
-
-            if results and "av_offset" in results:
-                render_sync_score(results)
-            else:
-                # Check for offsets.txt in the evaluation subdirectory as last resort
-                offsets_file = os.path.join(local_output_dir, "pywork", "evaluation_syncnet", "offsets.txt")
-                if os.path.exists(offsets_file):
-                    try:
-                        with open(offsets_file, 'r') as f:
-                            content = f.read().strip()
-                        if content:
-                            parts = content.split()
-                            offset = float(parts[0]) if len(parts) > 0 else 0
-                            confidence = float(parts[1]) if len(parts) > 1 else 0
-                            render_sync_score({"av_offset": offset, "confidence": confidence})
-                        else:
-                            st.warning("Evaluation completed but no results found")
-                    except Exception as e:
-                        st.error(f"Error reading offsets: {e}")
-                else:
-                    st.warning(f"Results not yet available. Check logs for details.")
-
-            # Job metadata
-            st.caption(f"Job ID: {job.job_id} | Created: {job.created_at[:19]}")
-
-
-def render_sync_score(results: dict):
-    """Render the sync score with visual indicators."""
-    # Support both 'av_offset' (from SyncNet JSON) and 'offset' (legacy)
-    offset = results.get("av_offset", results.get("offset", 0))
-    confidence = results.get("confidence", 0)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Offset (frames)", f"{offset:.2f}")
-
-    with col2:
-        st.metric("Confidence", f"{confidence:.4f}")
-
-    with col3:
-        # Determine quality based on offset and confidence
-        abs_offset = abs(offset)
-        if abs_offset <= 2 and confidence > 5:
-            quality = "Good"
-            color = "green"
-        elif abs_offset <= 5 and confidence > 3:
-            quality = "Fair"
-            color = "orange"
-        else:
-            quality = "Poor"
-            color = "red"
-
-        st.markdown(f"**Sync Quality:** :{color}[{quality}]")
-
-    # Explanation
-    st.caption("""
-    **Offset**: Frame difference between audio and video (0 = perfectly synced)
-    **Confidence**: Higher values indicate more reliable detection
-    **Quality**: Good (offset ≤2, conf >5), Fair (offset ≤5, conf >3), Poor (otherwise)
-    """)
 
 
 def submit_tts_eval_job(model: ChatterboxEvalModel, inputs: dict):
@@ -396,120 +263,3 @@ def submit_tts_eval_job(model: ChatterboxEvalModel, inputs: dict):
 
     except Exception as e:
         show_error_toast(f"Error submitting job: {str(e)}")
-
-
-def render_tts_eval_results():
-    """Render evaluation results for completed TTS evaluation jobs."""
-    st.subheader("Evaluation Results")
-
-    job_manager = JobManager()
-    all_jobs = job_manager.get_jobs_by_model("chatterbox_eval")
-    completed_jobs = [j for j in all_jobs if j.get_state() == JobState.COMPLETED]
-
-    if not completed_jobs:
-        st.info("No completed evaluations yet. Upload audio files to see results here.")
-        return
-
-    for job in completed_jobs:
-        output_path = job.output_file
-        local_output_dir = job.model_params.get("local_output_dir", os.path.dirname(output_path))
-
-        # Try to fetch results from pod if running locally
-        if not os.path.exists(output_path) and not IS_POD_ENV:
-            pod_output_dir = job.model_params.get("output_pod_dir")
-            if pod_output_dir:
-                try:
-                    k8s = KubernetesClient()
-                    os.makedirs(local_output_dir, exist_ok=True)
-                    # Copy the results CSV
-                    k8s.copy_from_pod(
-                        PERSISTENT_POD_NAME,
-                        job.model_params.get("output_pod_path"),
-                        output_path
-                    )
-                except Exception:
-                    pass
-
-        with st.expander(f"**Job: {job.job_id}**", expanded=True):
-            audio_count = job.input_files.get("audio_count", "?")
-            text_count = job.input_files.get("text_count", 0)
-            st.caption(f"Audio files: {audio_count} | Reference texts: {text_count}")
-
-            # Try to read the results CSV
-            if os.path.exists(output_path):
-                try:
-                    df = pd.read_csv(output_path)
-                    render_tts_eval_scores(df)
-                except Exception as e:
-                    st.error(f"Error reading results: {e}")
-            else:
-                st.warning(f"Results not yet available: {output_path}")
-
-            # Job metadata
-            st.caption(f"Job ID: {job.job_id} | Created: {job.created_at[:19]}")
-
-
-def render_tts_eval_scores(df: pd.DataFrame):
-    """Render TTS evaluation scores with visual indicators."""
-    # Summary metrics
-    col1, col2, col3 = st.columns(3)
-
-    mean_mos = df["mos"].mean() if "mos" in df.columns else None
-    mean_wer = df["wer"].dropna().mean() if "wer" in df.columns and df["wer"].notna().any() else None
-
-    with col1:
-        if mean_mos is not None:
-            st.metric("Average MOS", f"{mean_mos:.3f}")
-            # MOS quality indicator
-            if mean_mos >= 4.0:
-                st.markdown(":green[Excellent]")
-            elif mean_mos >= 3.5:
-                st.markdown(":blue[Good]")
-            elif mean_mos >= 3.0:
-                st.markdown(":orange[Fair]")
-            else:
-                st.markdown(":red[Poor]")
-
-    with col2:
-        if mean_wer is not None:
-            st.metric("Average WER", f"{mean_wer:.2%}")
-            # WER quality indicator
-            if mean_wer <= 0.05:
-                st.markdown(":green[Excellent]")
-            elif mean_wer <= 0.10:
-                st.markdown(":blue[Good]")
-            elif mean_wer <= 0.20:
-                st.markdown(":orange[Fair]")
-            else:
-                st.markdown(":red[Poor]")
-        else:
-            st.metric("Average WER", "N/A")
-            st.caption("No reference texts provided")
-
-    with col3:
-        st.metric("Files Evaluated", len(df))
-
-    # Detailed results table
-    st.markdown("**Per-file Results**")
-
-    # Select columns to display
-    display_cols = ["file", "mos"]
-    if "wer" in df.columns:
-        display_cols.append("wer")
-
-    display_df = df[display_cols].copy()
-
-    # Format WER as percentage
-    if "wer" in display_df.columns:
-        display_df["wer"] = display_df["wer"].apply(lambda x: f"{x:.2%}" if pd.notna(x) else "N/A")
-
-    # Format MOS
-    display_df["mos"] = display_df["mos"].apply(lambda x: f"{x:.3f}")
-
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    # Explanation
-    st.caption("""
-    **MOS (Mean Opinion Score)**: Speech quality prediction (1-5 scale, higher is better)
-    **WER (Word Error Rate)**: Transcription accuracy (lower is better, requires reference text)
-    """)

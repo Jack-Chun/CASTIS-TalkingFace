@@ -15,7 +15,6 @@ from ui.common import (
     show_model_unavailable_message,
 )
 from ui.components.job_status import render_job_status_panel, render_compact_job_status
-from ui.components.output_viewer import render_output_viewer
 
 
 def render_realesrgan_page():
@@ -36,7 +35,7 @@ def render_realesrgan_page():
     st.divider()
 
     # Two-column layout
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 2])
 
     with col1:
         # Input UI
@@ -60,10 +59,6 @@ def render_realesrgan_page():
     with col2:
         # Job status for this model
         render_job_status_panel(model_filter="realesrgan")
-
-    # Output section
-    st.divider()
-    render_output_viewer(model_filter="realesrgan")
 
 
 def submit_realesrgan_job(model: RealESRGANModel, inputs: dict):
