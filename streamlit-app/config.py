@@ -77,13 +77,13 @@ MODELS = {
     "chatterbox": {
         "id": "chatterbox",
         "name": "Chatterbox TTS",
-        "description": "Text-to-Speech generation",
-        "dir": "/data/Chatterbox",
+        "description": "Text-to-Speech generation with voice cloning",
+        "dir": "/data/chatterbox",
         "venv": "/data/chatterbox-venv",
-        "enabled": False,  # Disabled until repo is added
+        "enabled": True,
         "template": "chatterbox.yaml",
-        "image": "TBD",
-        "input_type": "text",
+        "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",
+        "input_type": "text_audio",
         "output_type": "audio",
     },
     "stableavatar": {

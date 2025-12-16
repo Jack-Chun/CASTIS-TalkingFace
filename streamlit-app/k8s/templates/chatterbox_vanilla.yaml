@@ -5,6 +5,7 @@ metadata:
   labels:
     app: gpu-model-runner
     model: chatterbox
+    variant: vanilla
     job-id: ${JOB_ID}
 spec:
   restartPolicy: Never
@@ -30,7 +31,7 @@ spec:
         - -c
         - |
           set -e
-          echo "=== Chatterbox TTS Generation ==="
+          echo "=== Chatterbox TTS Generation (VANILLA - No Finetuning) ==="
           echo "Job ID: ${JOB_ID}"
           echo "Text File: ${INPUT_TEXT_FILE}"
           echo "Voice Prompt: ${VOICE_PROMPT}"
@@ -45,18 +46,17 @@ spec:
           echo "=== GPU Info ==="
           nvidia-smi
 
-          # Run inference
-          echo "=== Running Chatterbox TTS ==="
+          # Run inference WITHOUT checkpoint (vanilla model)
+          echo "=== Running Chatterbox TTS (Vanilla) ==="
           python inference_tts.py \
             --text-file "${INPUT_TEXT_FILE}" \
             --output "${OUTPUT_AUDIO}" \
             --language "${LANGUAGE}" \
             --voice-prompt "${VOICE_PROMPT}" \
             --exaggeration ${EXAGGERATION} \
-            --cfg-weight ${CFG_WEIGHT} \
-            --checkpoint /data/chatterbox/final.pt
+            --cfg-weight ${CFG_WEIGHT}
 
-          echo "=== Inference Complete ==="
+          echo "=== Inference Complete (Vanilla) ==="
           echo "Output saved to: ${OUTPUT_AUDIO}"
           ls -la "${OUTPUT_AUDIO}"
           echo "Finished at: $(date)"
