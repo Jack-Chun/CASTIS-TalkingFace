@@ -121,8 +121,12 @@ def render_job_status_panel(model_filter: str = None):
             # Input files
             if job.input_files:
                 st.markdown("**Input Files:**")
-                for file_type, file_path in job.input_files.items():
-                    st.text(f"  {file_type}: {os.path.basename(file_path)}")
+                for file_type, file_value in job.input_files.items():
+                    # Handle both file paths (strings) and other values (counts, etc.)
+                    if isinstance(file_value, str):
+                        st.text(f"  {file_type}: {os.path.basename(file_value)}")
+                    else:
+                        st.text(f"  {file_type}: {file_value}")
 
             # Action buttons for this job
             btn_col1, btn_col2, btn_col3 = st.columns(3)
