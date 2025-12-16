@@ -11,7 +11,6 @@ import os
 # Add app directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import is_model_available
 from job_manager.manager import JobManager
 from ui.sidebar import render_sidebar
 
@@ -28,10 +27,9 @@ st.set_page_config(
 render_sidebar()
 
 # Main content - Home Page
-st.title("🎬 GPU Model Runner")
+st.title("Talking Face Generation Project")
 st.markdown("""
-Welcome to the GPU Model Runner! This application allows you to run
-deep learning models on GPU-powered Kubernetes pods.
+Welcome to the Talking Face Generation Project! This application allows you to generate talking face videos from images and texts.
 """)
 
 st.divider()
@@ -39,19 +37,10 @@ st.divider()
 # Model overview with page links - ordered by pipeline flow
 st.header("Available Models")
 
-chatterbox_available = is_model_available("chatterbox")
-stableavatar_available = is_model_available("stableavatar")
-realesrgan_available = is_model_available("realesrgan")
-syncnet_available = is_model_available("syncnet")
-
-col1, col2 = st.columns(2)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.subheader("🎤 1. Chatterbox TTS")
-    if chatterbox_available:
-        st.success("Available")
-    else:
-        st.info("Coming Soon")
     st.markdown("""
     **Text-to-Speech**
 
@@ -62,16 +51,13 @@ with col1:
     """)
     st.page_link(
         "pages/1_Text_to_Speech.py",
-        label="Go to Text to Speech →",
-        use_container_width=True
+        label="Go to Text to Speech",
+        use_container_width=True,
+        icon="➡️"
     )
 
 with col2:
     st.subheader("👤 2. StableAvatar")
-    if stableavatar_available:
-        st.success("Available")
-    else:
-        st.info("Coming Soon")
     st.markdown("""
     **Talking Face Generation**
 
@@ -82,18 +68,13 @@ with col2:
     """)
     st.page_link(
         "pages/2_Video_Generation.py",
-        label="Go to Video Generation →",
-        use_container_width=True
+        label="Go to Video Generation",
+        use_container_width=True,
+        icon="➡️"
     )
-
-col3, col4 = st.columns(2)
 
 with col3:
     st.subheader("🖼️ 3. Post Processing")
-    if realesrgan_available:
-        st.success("Available")
-    else:
-        st.warning("Not Available")
     st.markdown("""
     **Video/Image Upscaling**
 
@@ -104,16 +85,13 @@ with col3:
     """)
     st.page_link(
         "pages/3_Post_Processing.py",
-        label="Go to Post Processing →",
-        use_container_width=True
+        label="Go to Post Processing",
+        use_container_width=True,
+        icon="➡️"
     )
 
 with col4:
     st.subheader("📊 4. Evaluators")
-    if syncnet_available:
-        st.success("Available")
-    else:
-        st.warning("Not Available")
     st.markdown("""
     **Quality Evaluation**
 
@@ -124,8 +102,9 @@ with col4:
     """)
     st.page_link(
         "pages/4_Evaluators.py",
-        label="Go to Evaluators →",
-        use_container_width=True
+        label="Go to Evaluators",
+        use_container_width=True,
+        icon="➡️"
     )
 
 st.divider()

@@ -13,6 +13,20 @@ from job_manager.manager import JobManager
 def render_sidebar():
     """Render the shared sidebar content."""
     with st.sidebar:
+        st.markdown(
+            """
+            <style>
+                [data-testid="stSidebarNav"]::before {
+                    content: "SNU X CASTIS";
+                    margin-left: 10px;
+                    font-size: 30px;
+                    position: relative;
+                    top: 0px;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         # Job summary
         st.subheader("Active Jobs")
         job_manager = JobManager()
@@ -31,19 +45,3 @@ def render_sidebar():
         else:
             st.caption("No active jobs")
 
-        st.markdown("---")
-
-        # Quick links
-        st.subheader("Quick Links")
-        st.markdown("""
-- [Project README](https://github.com/Jack-Chun/CASTIS-TalkingFace)
-- [Chatterbox README](https://github.com/resemble-ai/chatterbox)
-- [StabeAvatar README](https://github.com/Francis-Rings/StableAvatar)
-- [Real-ESRGAN README](https://github.com/xinntao/Real-ESRGAN)
-        """)
-
-        st.markdown("---")
-        st.caption("""
-        SNU X CASTIS  
-        Talking Face Generation Project
-        """)
