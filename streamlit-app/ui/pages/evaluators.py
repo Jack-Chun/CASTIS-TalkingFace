@@ -219,8 +219,11 @@ def render_syncnet_results():
         output_path = job.output_file
         local_output_dir = job.model_params.get("local_output_dir", os.path.dirname(output_path))
 
+        # The actual SyncNet results are in pywork/evaluation_syncnet/syncnet_summary.json
+        actual_results_path = os.path.join(local_output_dir, "pywork", "evaluation_syncnet", "syncnet_summary.json")
+
         # Try to fetch results from pod if running locally
-        if not os.path.exists(output_path) and not IS_POD_ENV:
+        if not os.path.exists(actual_results_path) and not IS_POD_ENV:
             pod_output_dir = job.model_params.get("output_pod_dir")
             if pod_output_dir:
                 try:
@@ -236,20 +239,33 @@ def render_syncnet_results():
                     pass
 
         with st.expander(f"**Job: {job.job_id}**", expanded=True):
-            # Try to read the summary JSON
-            if os.path.exists(output_path):
+            # Try to read the summary JSON from the correct location
+            results = None
+
+            # First, try the actual SyncNet output location
+            if os.path.exists(actual_results_path):
+                try:
+                    with open(actual_results_path, 'r') as f:
+                        results = json.load(f)
+                except (json.JSONDecodeError, Exception):
+                    pass
+
+            # Fallback to the root output path
+            if results is None and os.path.exists(output_path):
                 try:
                     with open(output_path, 'r') as f:
                         results = json.load(f)
+                        # Check if it's the fallback "no data" file
+                        if results.get("status") == "completed" and "av_offset" not in results:
+                            results = None
+                except (json.JSONDecodeError, Exception):
+                    pass
 
-                    render_sync_score(results)
-                except json.JSONDecodeError:
-                    st.warning("Could not parse evaluation results")
-                except Exception as e:
-                    st.error(f"Error reading results: {e}")
+            if results and "av_offset" in results:
+                render_sync_score(results)
             else:
-                # Check for offsets.txt in the evaluation subdirectory
-                offsets_file = os.path.join(local_output_dir, "evaluation_syncnet", "offsets.txt")
+                # Check for offsets.txt in the evaluation subdirectory as last resort
+                offsets_file = os.path.join(local_output_dir, "pywork", "evaluation_syncnet", "offsets.txt")
                 if os.path.exists(offsets_file):
                     try:
                         with open(offsets_file, 'r') as f:
@@ -258,13 +274,13 @@ def render_syncnet_results():
                             parts = content.split()
                             offset = float(parts[0]) if len(parts) > 0 else 0
                             confidence = float(parts[1]) if len(parts) > 1 else 0
-                            render_sync_score({"offset": offset, "confidence": confidence})
+                            render_sync_score({"av_offset": offset, "confidence": confidence})
                         else:
                             st.warning("Evaluation completed but no results found")
                     except Exception as e:
                         st.error(f"Error reading offsets: {e}")
                 else:
-                    st.warning(f"Results not yet available: {output_path}")
+                    st.warning(f"Results not yet available. Check logs for details.")
 
             # Job metadata
             st.caption(f"Job ID: {job.job_id} | Created: {job.created_at[:19]}")
@@ -272,7 +288,8 @@ def render_syncnet_results():
 
 def render_sync_score(results: dict):
     """Render the sync score with visual indicators."""
-    offset = results.get("offset", 0)
+    # Support both 'av_offset' (from SyncNet JSON) and 'offset' (legacy)
+    offset = results.get("av_offset", results.get("offset", 0))
     confidence = results.get("confidence", 0)
 
     col1, col2, col3 = st.columns(3)

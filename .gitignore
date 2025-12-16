@@ -254,6 +254,8 @@ input/audio/
 output/upscaled/
 output/audio/
 output/talking_face/
+output/syncnet/
+output/tts_eval/
 
 # Keep the base input/output directories but ignore contents
 !input/.gitkeep
