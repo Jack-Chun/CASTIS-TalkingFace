@@ -64,6 +64,8 @@ def render_job_status_panel(model_filter: str = None):
         if model_filter == "stableavatar":
             vanilla_jobs = job_manager.get_jobs_by_model("stableavatar-vanilla")
             jobs = jobs + vanilla_jobs
+            # Re-sort combined list by creation time (newest first)
+            jobs = sorted(jobs, key=lambda j: j.created_at, reverse=True)
     else:
         jobs = job_manager.get_all_jobs()
 

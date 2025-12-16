@@ -212,14 +212,16 @@ class JobManager:
         ]
 
     def get_completed_jobs(self) -> List[Job]:
-        """Return completed jobs."""
+        """Return completed jobs, sorted by creation time (newest first)."""
         jobs = self._load_jobs()
-        return [j for j in jobs.values() if j.get_state() == JobState.COMPLETED]
+        completed = [j for j in jobs.values() if j.get_state() == JobState.COMPLETED]
+        return sorted(completed, key=lambda j: j.created_at, reverse=True)
 
     def get_failed_jobs(self) -> List[Job]:
-        """Return failed jobs."""
+        """Return failed jobs, sorted by creation time (newest first)."""
         jobs = self._load_jobs()
-        return [j for j in jobs.values() if j.get_state() == JobState.FAILED]
+        failed = [j for j in jobs.values() if j.get_state() == JobState.FAILED]
+        return sorted(failed, key=lambda j: j.created_at, reverse=True)
 
     def get_all_jobs(self) -> List[Job]:
         """Return all tracked jobs, sorted by creation time (newest first)."""
@@ -231,9 +233,10 @@ class JobManager:
         )
 
     def get_jobs_by_model(self, model_type: str) -> List[Job]:
-        """Return all jobs for a specific model type."""
+        """Return all jobs for a specific model type, sorted by creation time (newest first)."""
         jobs = self._load_jobs()
-        return [j for j in jobs.values() if j.model_type == model_type]
+        filtered = [j for j in jobs.values() if j.model_type == model_type]
+        return sorted(filtered, key=lambda j: j.created_at, reverse=True)
 
     def get_job_logs(self, job_id: str, force_refresh: bool = False) -> Optional[str]:
         """Get logs for a specific job and save them permanently."""
