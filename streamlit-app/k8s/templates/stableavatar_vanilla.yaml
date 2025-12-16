@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD_NAME}
+  labels:
+    app: gpu-model-runner
+    model: stableavatar-vanilla
+    job-id: ${JOB_ID}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: gpu-worker
+      image: ${IMAGE}
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/python/bin:/data/stableavatar-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: TOKENIZERS_PARALLELISM
+          value: "false"
+      command:
+        - /bin/bash
+        - -c
+        - |
+          source /data/stableavatar-venv/bin/activate
+
+          echo "=== StableAvatar Talking Face Generation (Vanilla - No LoRA) ==="
+          echo "Input Image: ${INPUT_IMAGE}"
+          echo "Input Audio: ${INPUT_AUDIO}"
+          echo "Output Video: ${OUTPUT_VIDEO}"
+          echo "Inference Steps: ${INFERENCE_STEPS}"
+
+          OUTPUT_DIR=$(dirname "${OUTPUT_VIDEO}")
+          mkdir -p "${OUTPUT_DIR}"
+
+          cd /data/StableAvatar
+
+          # Run inference using the inference.sh script with --no-lora flag
+          ./inference.sh "${INPUT_IMAGE}" "${INPUT_AUDIO}" "${OUTPUT_DIR}" --steps ${INFERENCE_STEPS} --no-lora
+
+          # The script outputs to $OUTPUT_DIR/video.mp4
+          GENERATED="${OUTPUT_DIR}/video.mp4"
+
+          # Rename to expected output path if different
+          if [ -f "${GENERATED}" ] && [ "${GENERATED}" != "${OUTPUT_VIDEO}" ]; then
+            mv "${GENERATED}" "${OUTPUT_VIDEO}"
+          fi
+
+          # Verify output exists
+          if [ ! -f "${OUTPUT_VIDEO}" ]; then
+            echo "ERROR: Output video not created!"
+            echo "Files in output directory:"
+            ls -la "${OUTPUT_DIR}/"
+            exit 1
+          fi
+
+          # Get output video info
+          echo "=== Video generation complete (Vanilla) ! ==="
+          echo "Output video info:"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=noprint_wrappers=1 "${OUTPUT_VIDEO}" 2>/dev/null || true
+          echo "Output file: ${OUTPUT_VIDEO}"
+          ls -lh "${OUTPUT_VIDEO}"
+
+          echo "DONE"
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data

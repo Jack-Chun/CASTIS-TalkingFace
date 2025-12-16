@@ -48,7 +48,9 @@ class StableAvatarModel(BaseModelRunner):
     def is_enabled(self) -> bool:
         return MODELS["stableavatar"]["enabled"]
 
-    def get_yaml_template_path(self) -> str:
+    def get_yaml_template_path(self, vanilla: bool = False) -> str:
+        if vanilla:
+            return os.path.join(YAML_TEMPLATE_DIR, "stableavatar_vanilla.yaml")
         return os.path.join(YAML_TEMPLATE_DIR, "stableavatar.yaml")
 
     def render_input_ui(self) -> Optional[Dict[str, Any]]:
@@ -125,6 +127,14 @@ class StableAvatarModel(BaseModelRunner):
             help="Number of diffusion steps. Higher = better quality but slower. Default: 50"
         )
 
+        st.subheader("Comparison Mode")
+
+        compare_with_vanilla = st.checkbox(
+            "Compare with vanilla model (no LoRA)",
+            value=False,
+            help="Run both LoRA fine-tuned and vanilla models concurrently to compare results side by side"
+        )
+
         # Get files from session state
         image_file = st.session_state.stableavatar_image
         audio_file = st.session_state.stableavatar_audio
@@ -139,12 +149,13 @@ class StableAvatarModel(BaseModelRunner):
             },
             "params": {
                 "inference_steps": inference_steps,
+                "compare_with_vanilla": compare_with_vanilla,
             }
         }
 
-    def generate_yaml(self, config: JobConfig) -> str:
+    def generate_yaml(self, config: JobConfig, vanilla: bool = False) -> str:
         """Generate YAML manifest from template."""
-        template_path = self.get_yaml_template_path()
+        template_path = self.get_yaml_template_path(vanilla=vanilla)
 
         with open(template_path, 'r') as f:
             template_content = f.read()
@@ -163,13 +174,15 @@ class StableAvatarModel(BaseModelRunner):
 
         return yaml_content
 
-    def get_output_path(self, job_id: str, input_files: Dict[str, str]) -> str:
+    def get_output_path(self, job_id: str, input_files: Dict[str, str], vanilla: bool = False) -> str:
         """Calculate output path for generated video (POD path for YAML)."""
-        return os.path.join(POD_OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}.mp4")
+        suffix = "_vanilla" if vanilla else ""
+        return os.path.join(POD_OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}{suffix}.mp4")
 
-    def get_local_output_path(self, job_id: str) -> str:
+    def get_local_output_path(self, job_id: str, vanilla: bool = False) -> str:
         """Calculate local output path for displaying results."""
-        return os.path.join(OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}.mp4")
+        suffix = "_vanilla" if vanilla else ""
+        return os.path.join(OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}{suffix}.mp4")
 
     def get_pod_input_paths(self, job_id: str, image_name: str, audio_name: str) -> Dict[str, str]:
         """Get the pod paths for input files."""

@@ -60,6 +60,10 @@ def render_job_status_panel(model_filter: str = None):
     # Get jobs and update active ones
     if model_filter:
         jobs = job_manager.get_jobs_by_model(model_filter)
+        # Also include related model variants (e.g., stableavatar-vanilla for stableavatar)
+        if model_filter == "stableavatar":
+            vanilla_jobs = job_manager.get_jobs_by_model("stableavatar-vanilla")
+            jobs = jobs + vanilla_jobs
     else:
         jobs = job_manager.get_all_jobs()
 
@@ -168,6 +172,11 @@ def render_compact_job_status(model_type: str):
     """
     job_manager = JobManager()
     jobs = job_manager.get_jobs_by_model(model_type)
+
+    # Also include related model variants (e.g., stableavatar-vanilla for stableavatar)
+    if model_type == "stableavatar":
+        vanilla_jobs = job_manager.get_jobs_by_model("stableavatar-vanilla")
+        jobs = jobs + vanilla_jobs
 
     if not jobs:
         return
