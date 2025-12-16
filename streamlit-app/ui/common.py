@@ -14,9 +14,11 @@ def generate_job_id(model_id: str) -> str:
 
 def generate_pod_name(model_id: str, job_id: str) -> str:
     """Generate a Kubernetes-compliant pod name."""
-    # Pod names must be lowercase and can contain - and .
+    # Pod names must be lowercase, alphanumeric, and can contain - and .
+    # Replace underscores with hyphens for k8s compliance
+    safe_model_id = model_id.replace("_", "-")
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    return f"gpu-{model_id}-{timestamp}"[:63]  # Max 63 chars for k8s names
+    return f"gpu-{safe_model_id}-{timestamp}"[:63]  # Max 63 chars for k8s names
 
 
 def format_file_size(size_bytes: int) -> str:
