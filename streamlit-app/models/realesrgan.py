@@ -55,17 +55,34 @@ class RealESRGANModel(BaseModelRunner):
 
         Returns dict with 'files' and 'params' or None if incomplete.
         """
+        # Initialize session state for uploaded file
+        if "realesrgan_video" not in st.session_state:
+            st.session_state.realesrgan_video = None
+
         st.subheader("Upload Video")
 
-        uploaded_file = st.file_uploader(
-            "Choose a video file to upscale",
-            type=["mp4", "mov", "avi", "mkv", "webm"],
-            key="realesrgan_video_upload",
-            help="Supported formats: MP4, MOV, AVI, MKV, WebM"
-        )
-
-        if uploaded_file:
-            st.info(f"**File:** {uploaded_file.name} ({uploaded_file.size / 1024 / 1024:.2f} MB)")
+        if st.session_state.realesrgan_video is None:
+            # Show uploader if no video uploaded
+            uploaded_file = st.file_uploader(
+                "Choose a video file to upscale",
+                type=["mp4", "mov", "avi", "mkv", "webm"],
+                key="realesrgan_video_upload",
+                help="Supported formats: MP4, MOV, AVI, MKV, WebM"
+            )
+            if uploaded_file:
+                st.session_state.realesrgan_video = uploaded_file
+                st.rerun()
+        else:
+            # Show preview and remove button
+            uploaded_file = st.session_state.realesrgan_video
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.video(uploaded_file)
+                st.caption(f"{uploaded_file.name} ({uploaded_file.size / 1024 / 1024:.2f} MB)")
+            with col2:
+                if st.button("Remove", key="remove_realesrgan_video"):
+                    st.session_state.realesrgan_video = None
+                    st.rerun()
 
         st.subheader("Parameters")
 
@@ -85,6 +102,9 @@ class RealESRGANModel(BaseModelRunner):
                 value=True,
                 help="FP32 is slower but more accurate. Recommended for best quality."
             )
+
+        # Get file from session state
+        uploaded_file = st.session_state.realesrgan_video
 
         if uploaded_file is None:
             return None

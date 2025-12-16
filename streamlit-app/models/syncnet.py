@@ -55,18 +55,37 @@ class SyncNetModel(BaseModelRunner):
 
         Returns dict with 'files' and 'params' or None if incomplete.
         """
+        # Initialize session state for uploaded file
+        if "syncnet_video" not in st.session_state:
+            st.session_state.syncnet_video = None
+
         st.subheader("Video to Evaluate")
 
-        video_file = st.file_uploader(
-            "Upload a talking face video",
-            type=["mp4", "mov", "avi", "mkv", "webm"],
-            key="syncnet_video_upload",
-            help="Upload a talking face video to evaluate its lip sync quality"
-        )
+        if st.session_state.syncnet_video is None:
+            # Show uploader if no video uploaded
+            video_file = st.file_uploader(
+                "Upload a talking face video",
+                type=["mp4", "mov", "avi", "mkv", "webm"],
+                key="syncnet_video_upload",
+                help="Upload a talking face video to evaluate its lip sync quality"
+            )
+            if video_file:
+                st.session_state.syncnet_video = video_file
+                st.rerun()
+        else:
+            # Show preview and remove button
+            video_file = st.session_state.syncnet_video
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.video(video_file)
+                st.caption(f"{video_file.name} ({video_file.size / 1024 / 1024:.2f} MB)")
+            with col2:
+                if st.button("Remove", key="remove_syncnet_video"):
+                    st.session_state.syncnet_video = None
+                    st.rerun()
 
-        if video_file:
-            st.video(video_file)
-            st.info(f"**File:** {video_file.name} ({video_file.size / 1024 / 1024:.2f} MB)")
+        # Get file from session state
+        video_file = st.session_state.syncnet_video
 
         if video_file is None:
             return None

@@ -219,7 +219,7 @@ def render_video_output(video_path: str, job):
                 }}
             </script>
             """
-            st.components.v1.html(html_code, height=650, scrolling=True)
+            st.components.v1.html(html_code, height=500, scrolling=True)
 
         except Exception as e:
             st.error(f"Error loading videos for comparison: {e}")

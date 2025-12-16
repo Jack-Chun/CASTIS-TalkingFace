@@ -57,29 +57,62 @@ class StableAvatarModel(BaseModelRunner):
 
         Returns dict with 'files' and 'params' or None if incomplete.
         """
+        # Initialize session state for uploaded files
+        if "stableavatar_image" not in st.session_state:
+            st.session_state.stableavatar_image = None
+        if "stableavatar_audio" not in st.session_state:
+            st.session_state.stableavatar_audio = None
+
+        # Face Image section
         st.subheader("Face Image")
 
-        image_file = st.file_uploader(
-            "Upload a face image",
-            type=["png", "jpg", "jpeg", "webp"],
-            key="stableavatar_image_upload",
-            help="Upload a clear frontal face image (PNG, JPG, JPEG, WebP)"
-        )
+        if st.session_state.stableavatar_image is None:
+            # Show uploader if no image uploaded
+            image_file = st.file_uploader(
+                "Upload a face image",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="stableavatar_image_upload",
+                help="Upload a clear frontal face image (PNG, JPG, JPEG, WebP)"
+            )
+            if image_file:
+                st.session_state.stableavatar_image = image_file
+                st.rerun()
+        else:
+            # Show preview and remove button
+            image_file = st.session_state.stableavatar_image
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.image(image_file, caption=image_file.name, width=600)
+            with col2:
+                if st.button("Remove", key="remove_image"):
+                    st.session_state.stableavatar_image = None
+                    st.rerun()
 
-        if image_file:
-            st.image(image_file, caption="Uploaded face image", width=200)
-
+        # Driving Audio section
         st.subheader("Driving Audio")
 
-        audio_file = st.file_uploader(
-            "Upload audio file",
-            type=["wav", "mp3", "m4a", "flac"],
-            key="stableavatar_audio_upload",
-            help="Upload the audio that will drive the talking animation"
-        )
-
-        if audio_file:
-            st.audio(audio_file, format=f"audio/{audio_file.type.split('/')[-1]}")
+        if st.session_state.stableavatar_audio is None:
+            # Show uploader if no audio uploaded
+            audio_file = st.file_uploader(
+                "Upload audio file",
+                type=["wav", "mp3", "m4a", "flac"],
+                key="stableavatar_audio_upload",
+                help="Upload the audio that will drive the talking animation"
+            )
+            if audio_file:
+                st.session_state.stableavatar_audio = audio_file
+                st.rerun()
+        else:
+            # Show preview and remove button
+            audio_file = st.session_state.stableavatar_audio
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.audio(audio_file)
+                st.caption(audio_file.name)
+            with col2:
+                if st.button("Remove", key="remove_audio"):
+                    st.session_state.stableavatar_audio = None
+                    st.rerun()
 
         st.subheader("Parameters")
 
@@ -91,6 +124,10 @@ class StableAvatarModel(BaseModelRunner):
             step=5,
             help="Number of diffusion steps. Higher = better quality but slower. Default: 50"
         )
+
+        # Get files from session state
+        image_file = st.session_state.stableavatar_image
+        audio_file = st.session_state.stableavatar_audio
 
         if image_file is None or audio_file is None:
             return None
