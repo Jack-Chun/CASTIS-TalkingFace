@@ -36,38 +36,18 @@ deep learning models on GPU-powered Kubernetes pods.
 
 st.divider()
 
-# Model overview with page links
+# Model overview with page links - ordered by pipeline flow
 st.header("Available Models")
 
-realesrgan_available = is_model_available("realesrgan")
 chatterbox_available = is_model_available("chatterbox")
 stableavatar_available = is_model_available("stableavatar")
+realesrgan_available = is_model_available("realesrgan")
+syncnet_available = is_model_available("syncnet")
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("🖼️ Real-ESRGAN")
-    if realesrgan_available:
-        st.success("Available")
-    else:
-        st.warning("Not Available")
-    st.markdown("""
-    **Video/Image Upscaling**
-
-    Upscale videos and images using Real-ESRGAN
-    super-resolution (2x or 4x).
-
-    - Input: Video file (MP4, MOV, etc.)
-    - Output: Upscaled video
-    """)
-    st.page_link(
-        "pages/1_Real-ESRGAN.py",
-        label="Go to Real-ESRGAN →",
-        use_container_width=True
-    )
-
-with col2:
-    st.subheader("🎤 Chatterbox TTS")
+    st.subheader("🎤 1. Chatterbox TTS")
     if chatterbox_available:
         st.success("Available")
     else:
@@ -75,20 +55,19 @@ with col2:
     st.markdown("""
     **Text-to-Speech**
 
-    Generate natural-sounding speech from text
-    using Chatterbox TTS.
+    Generate natural-sounding speech from text.
 
     - Input: Text
     - Output: Audio file (WAV)
     """)
     st.page_link(
-        "pages/2_Chatterbox_TTS.py",
-        label="Go to Chatterbox →",
+        "pages/1_Text_to_Speech.py",
+        label="Go to Text to Speech →",
         use_container_width=True
     )
 
-with col3:
-    st.subheader("👤 StableAvatar")
+with col2:
+    st.subheader("👤 2. StableAvatar")
     if stableavatar_available:
         st.success("Available")
     else:
@@ -96,15 +75,56 @@ with col3:
     st.markdown("""
     **Talking Face Generation**
 
-    Generate talking face videos from a static
-    image and driving audio.
+    Generate talking face videos from image + audio.
 
     - Input: Face image + Audio
     - Output: Talking face video
     """)
     st.page_link(
-        "pages/3_StableAvatar.py",
-        label="Go to StableAvatar →",
+        "pages/2_Video_Generation.py",
+        label="Go to Video Generation →",
+        use_container_width=True
+    )
+
+col3, col4 = st.columns(2)
+
+with col3:
+    st.subheader("🖼️ 3. Post Processing")
+    if realesrgan_available:
+        st.success("Available")
+    else:
+        st.warning("Not Available")
+    st.markdown("""
+    **Video/Image Upscaling**
+
+    Upscale videos using Real-ESRGAN (2x/4x).
+
+    - Input: Video file (MP4, MOV, etc.)
+    - Output: Upscaled video
+    """)
+    st.page_link(
+        "pages/3_Post_Processing.py",
+        label="Go to Post Processing →",
+        use_container_width=True
+    )
+
+with col4:
+    st.subheader("📊 4. Evaluators")
+    if syncnet_available:
+        st.success("Available")
+    else:
+        st.warning("Not Available")
+    st.markdown("""
+    **Quality Evaluation**
+
+    Evaluate output quality (lip sync, TTS).
+
+    - Input: Generated video/audio
+    - Output: Quality metrics
+    """)
+    st.page_link(
+        "pages/4_Evaluators.py",
+        label="Go to Evaluators →",
         use_container_width=True
     )
 

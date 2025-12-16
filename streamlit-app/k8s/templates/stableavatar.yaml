@@ -23,30 +23,52 @@ spec:
           value: /data/python/bin:/data/stableavatar-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         - name: CUDA_VISIBLE_DEVICES
           value: "0"
+        - name: TOKENIZERS_PARALLELISM
+          value: "false"
       command:
         - /bin/bash
         - -c
         - |
-          # PLACEHOLDER: StableAvatar talking face generation
-          # This template will be updated when the StableAvatar repository is added
+          source /data/stableavatar-venv/bin/activate
 
           echo "=== StableAvatar Talking Face Generation ==="
           echo "Input Image: ${INPUT_IMAGE}"
           echo "Input Audio: ${INPUT_AUDIO}"
           echo "Output Video: ${OUTPUT_VIDEO}"
+          echo "Inference Steps: ${INFERENCE_STEPS}"
 
-          source /data/stableavatar-venv/bin/activate
+          OUTPUT_DIR=$(dirname "${OUTPUT_VIDEO}")
+          mkdir -p "${OUTPUT_DIR}"
 
           cd /data/StableAvatar
 
-          # TODO: Replace with actual StableAvatar inference command
-          # python inference.py \
-          #   --image "${INPUT_IMAGE}" \
-          #   --audio "${INPUT_AUDIO}" \
-          #   --output "${OUTPUT_VIDEO}"
+          # Run inference using the inference.sh script
+          ./inference.sh "${INPUT_IMAGE}" "${INPUT_AUDIO}" "${OUTPUT_DIR}" --steps ${INFERENCE_STEPS}
 
-          echo "ERROR: StableAvatar model not yet implemented"
-          exit 1
+          # The script outputs to $OUTPUT_DIR/video.mp4
+          GENERATED="${OUTPUT_DIR}/video.mp4"
+
+          # Rename to expected output path if different
+          if [ -f "${GENERATED}" ] && [ "${GENERATED}" != "${OUTPUT_VIDEO}" ]; then
+            mv "${GENERATED}" "${OUTPUT_VIDEO}"
+          fi
+
+          # Verify output exists
+          if [ ! -f "${OUTPUT_VIDEO}" ]; then
+            echo "ERROR: Output video not created!"
+            echo "Files in output directory:"
+            ls -la "${OUTPUT_DIR}/"
+            exit 1
+          fi
+
+          # Get output video info
+          echo "=== Video generation complete! ==="
+          echo "Output video info:"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=noprint_wrappers=1 "${OUTPUT_VIDEO}" 2>/dev/null || true
+          echo "Output file: ${OUTPUT_VIDEO}"
+          ls -lh "${OUTPUT_VIDEO}"
+
+          echo "DONE"
       resources:
         limits:
           nvidia.com/gpu: 1

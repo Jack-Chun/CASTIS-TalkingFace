@@ -1,4 +1,4 @@
-"""StableAvatar model runner implementation (placeholder)."""
+"""StableAvatar model runner implementation."""
 
 import os
 import streamlit as st
@@ -12,11 +12,17 @@ from config import (
     OUTPUT_TALKING_FACE_DIR,
     INPUT_IMAGES_DIR,
     INPUT_AUDIO_DIR,
+    POD_INPUT_IMAGES_DIR,
+    POD_INPUT_AUDIO_DIR,
+    POD_OUTPUT_TALKING_FACE_DIR,
+    IS_POD_ENV,
+    PERSISTENT_POD_NAME,
 )
+from k8s.client import KubernetesClient
 
 
 class StableAvatarModel(BaseModelRunner):
-    """StableAvatar talking face model runner (placeholder until repo is added)."""
+    """StableAvatar talking face model runner."""
 
     @property
     def model_id(self) -> str:
@@ -77,25 +83,14 @@ class StableAvatarModel(BaseModelRunner):
 
         st.subheader("Parameters")
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-            pose_style = st.selectbox(
-                "Pose Style",
-                options=["natural", "still", "expressive"],  # Placeholder options
-                index=0,
-                help="Head movement style (options will be updated when model is available)"
-            )
-
-        with col2:
-            expression_scale = st.slider(
-                "Expression Scale",
-                min_value=0.5,
-                max_value=2.0,
-                value=1.0,
-                step=0.1,
-                help="Scale of facial expressions"
-            )
+        inference_steps = st.slider(
+            "Inference Steps",
+            min_value=20,
+            max_value=100,
+            value=50,
+            step=5,
+            help="Number of diffusion steps. Higher = better quality but slower. Default: 50"
+        )
 
         if image_file is None or audio_file is None:
             return None
@@ -106,8 +101,7 @@ class StableAvatarModel(BaseModelRunner):
                 "audio": audio_file,
             },
             "params": {
-                "pose_style": pose_style,
-                "expression_scale": expression_scale,
+                "inference_steps": inference_steps,
             }
         }
 
@@ -127,15 +121,25 @@ class StableAvatarModel(BaseModelRunner):
             INPUT_IMAGE=config.input_files.get("image", ""),
             INPUT_AUDIO=config.input_files.get("audio", ""),
             OUTPUT_VIDEO=config.output_file,
-            POSE_STYLE=config.model_params.get("pose_style", "natural"),
-            EXPRESSION_SCALE=config.model_params.get("expression_scale", 1.0),
+            INFERENCE_STEPS=config.model_params.get("inference_steps", 50),
         )
 
         return yaml_content
 
     def get_output_path(self, job_id: str, input_files: Dict[str, str]) -> str:
-        """Calculate output path for generated video."""
+        """Calculate output path for generated video (POD path for YAML)."""
+        return os.path.join(POD_OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}.mp4")
+
+    def get_local_output_path(self, job_id: str) -> str:
+        """Calculate local output path for displaying results."""
         return os.path.join(OUTPUT_TALKING_FACE_DIR, f"talking_face_{job_id}.mp4")
+
+    def get_pod_input_paths(self, job_id: str, image_name: str, audio_name: str) -> Dict[str, str]:
+        """Get the pod paths for input files."""
+        return {
+            "image": os.path.join(POD_INPUT_IMAGES_DIR, job_id, image_name),
+            "audio": os.path.join(POD_INPUT_AUDIO_DIR, job_id, audio_name),
+        }
 
     def get_output_type(self) -> str:
         return "video"
@@ -156,24 +160,61 @@ class StableAvatarModel(BaseModelRunner):
 
         return True, ""
 
-    def save_uploaded_files(self, image_file, audio_file, job_id: str) -> Dict[str, str]:
-        """Save uploaded files to input directories and return paths."""
-        paths = {}
+    def save_uploaded_files(self, image_file, audio_file, job_id: str) -> tuple[Dict[str, str], Dict[str, str]]:
+        """
+        Save uploaded files to input directories.
 
-        # Save image
+        When running locally, also copies to the persistent volume pod.
+
+        Returns:
+            Tuple of (local_paths, pod_paths)
+        """
+        local_paths = {}
+        pod_paths = {}
+
+        # Save image locally
         image_dir = os.path.join(INPUT_IMAGES_DIR, job_id)
         os.makedirs(image_dir, exist_ok=True)
-        image_path = os.path.join(image_dir, image_file.name)
-        with open(image_path, "wb") as f:
+        local_image_path = os.path.join(image_dir, image_file.name)
+        with open(local_image_path, "wb") as f:
             f.write(image_file.getbuffer())
-        paths["image"] = image_path
+        local_paths["image"] = local_image_path
 
-        # Save audio
+        # Save audio locally
         audio_dir = os.path.join(INPUT_AUDIO_DIR, job_id)
         os.makedirs(audio_dir, exist_ok=True)
-        audio_path = os.path.join(audio_dir, audio_file.name)
-        with open(audio_path, "wb") as f:
+        local_audio_path = os.path.join(audio_dir, audio_file.name)
+        with open(local_audio_path, "wb") as f:
             f.write(audio_file.getbuffer())
-        paths["audio"] = audio_path
+        local_paths["audio"] = local_audio_path
 
-        return paths
+        # Calculate pod paths
+        pod_paths = self.get_pod_input_paths(job_id, image_file.name, audio_file.name)
+
+        # If running locally, copy to the persistent volume pod
+        if not IS_POD_ENV:
+            k8s = KubernetesClient()
+            import subprocess
+
+            # Create directories on the pod
+            pod_image_dir = os.path.join(POD_INPUT_IMAGES_DIR, job_id)
+            pod_audio_dir = os.path.join(POD_INPUT_AUDIO_DIR, job_id)
+
+            subprocess.run(
+                [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--",
+                 "mkdir", "-p", pod_image_dir, pod_audio_dir],
+                capture_output=True,
+                timeout=30
+            )
+
+            # Copy image to pod
+            success, msg = k8s.copy_to_pod(local_image_path, PERSISTENT_POD_NAME, pod_paths["image"])
+            if not success:
+                raise RuntimeError(f"Failed to copy image to pod: {msg}")
+
+            # Copy audio to pod
+            success, msg = k8s.copy_to_pod(local_audio_path, PERSISTENT_POD_NAME, pod_paths["audio"])
+            if not success:
+                raise RuntimeError(f"Failed to copy audio to pod: {msg}")
+
+        return local_paths, pod_paths

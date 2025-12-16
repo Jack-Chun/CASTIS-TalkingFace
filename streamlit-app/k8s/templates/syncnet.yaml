@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD_NAME}
+  labels:
+    app: gpu-model-runner
+    model: syncnet
+    job-id: ${JOB_ID}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: my-volume
+      persistentVolumeClaim:
+        claimName: persistent-volume
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: gpu-worker
+      image: ${IMAGE}
+      env:
+        - name: HOME
+          value: /data
+        - name: PATH
+          value: /data/python/bin:/data/syncnet-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+      command:
+        - /bin/bash
+        - -c
+        - |
+          source /data/syncnet-venv/bin/activate
+
+          echo "=== SyncNet Lip Sync Evaluation ==="
+          echo "Input Video: ${INPUT_VIDEO}"
+          echo "Output Dir: ${OUTPUT_DIR}"
+
+          mkdir -p "${OUTPUT_DIR}"
+
+          cd /data/syncnet_python
+
+          # Run evaluation using the eval.sh script
+          ./eval.sh "${INPUT_VIDEO}" "${OUTPUT_DIR}"
+
+          # Check for results
+          echo "=== Evaluation complete! ==="
+
+          # Display offset results if available
+          if [ -f "${OUTPUT_DIR}/evaluation_syncnet/offsets.txt" ]; then
+            echo "Offset results:"
+            cat "${OUTPUT_DIR}/evaluation_syncnet/offsets.txt"
+          fi
+
+          # Create a summary JSON if not exists
+          SUMMARY_FILE="${OUTPUT_DIR}/syncnet_summary.json"
+          if [ -f "${OUTPUT_DIR}/evaluation_syncnet/offsets.txt" ]; then
+            # Parse the offsets file and create JSON
+            OFFSET=$(head -1 "${OUTPUT_DIR}/evaluation_syncnet/offsets.txt" | awk '{print $1}' || echo "0")
+            CONF=$(head -1 "${OUTPUT_DIR}/evaluation_syncnet/offsets.txt" | awk '{print $2}' || echo "0")
+            echo "{\"offset\": ${OFFSET:-0}, \"confidence\": ${CONF:-0}, \"status\": \"completed\"}" > "${SUMMARY_FILE}"
+            echo "Summary saved to: ${SUMMARY_FILE}"
+            cat "${SUMMARY_FILE}"
+          else
+            echo "{\"status\": \"completed\", \"message\": \"Evaluation completed but no offset data found\"}" > "${SUMMARY_FILE}"
+          fi
+
+          echo "Files in output directory:"
+          ls -la "${OUTPUT_DIR}/"
+
+          echo "DONE"
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - name: my-volume
+          mountPath: /data

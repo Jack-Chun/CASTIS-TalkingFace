@@ -28,44 +28,6 @@ def render_stableavatar_page():
     # Check if model is available
     if not model.is_available():
         show_model_unavailable_message(model.display_name)
-
-        # Show what's needed
-        st.subheader("Setup Instructions")
-        st.markdown("""
-        To enable StableAvatar:
-
-        1. **Clone the repository:**
-           ```bash
-           cd /data
-           git clone <stableavatar-repo-url> StableAvatar
-           ```
-
-        2. **Create virtual environment:**
-           ```bash
-           /data/python/bin/python3.11 -m venv /data/stableavatar-venv
-           source /data/stableavatar-venv/bin/activate
-           pip install -r /data/StableAvatar/requirements.txt
-           ```
-
-        3. **Download model weights:**
-           Follow the model repository instructions to download
-           pretrained weights.
-
-        4. **Update configuration:**
-           Edit `/data/streamlit-app/config.py` and set:
-           ```python
-           "stableavatar": {
-               ...
-               "enabled": True,
-               "image": "<docker-image-with-stableavatar>",
-               ...
-           }
-           ```
-
-        5. **Update YAML template:**
-           Edit `/data/streamlit-app/k8s/templates/stableavatar.yaml`
-           with the correct inference commands.
-        """)
         return
 
     # Show compact job status
@@ -111,25 +73,28 @@ def submit_stableavatar_job(model: StableAvatarModel, inputs: dict):
         job_id = generate_job_id(model.model_id)
         pod_name = generate_pod_name(model.model_id, job_id)
 
-        # Save uploaded files
+        # Save uploaded files (returns local_paths, pod_paths)
         image_file = inputs["files"]["image"]
         audio_file = inputs["files"]["audio"]
-        input_files = model.save_uploaded_files(image_file, audio_file, job_id)
+        local_paths, pod_paths = model.save_uploaded_files(image_file, audio_file, job_id)
 
         params = inputs["params"]
 
-        # Calculate output path
-        output_path = model.get_output_path(job_id, input_files)
+        # Calculate output path (pod path for YAML)
+        output_path = model.get_output_path(job_id, pod_paths)
 
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Calculate local output path for tracking
+        local_output_path = model.get_local_output_path(job_id)
 
-        # Create job config
+        # Ensure local output directory exists (for when we copy results back)
+        os.makedirs(os.path.dirname(local_output_path), exist_ok=True)
+
+        # Create job config with pod paths
         config = JobConfig(
             job_id=job_id,
             pod_name=pod_name,
             model_id=model.model_id,
-            input_files=input_files,
+            input_files=pod_paths,  # Use pod paths for YAML
             output_file=output_path,
             model_params=params,
         )
@@ -142,15 +107,20 @@ def submit_stableavatar_job(model: StableAvatarModel, inputs: dict):
         success, message = k8s.apply_yaml(yaml_content)
 
         if success:
-            # Register job
+            # Register job - store local paths for result viewing
             job_manager = JobManager()
             job_manager.create_job(
                 job_id=job_id,
                 pod_name=pod_name,
                 model_type=model.model_id,
-                input_files=input_files,
-                output_file=output_path,
-                model_params=params,
+                input_files={
+                    "image": local_paths["image"],
+                    "audio": local_paths["audio"],
+                    "image_pod": pod_paths["image"],
+                    "audio_pod": pod_paths["audio"],
+                },
+                output_file=local_output_path,  # Local path for viewing results
+                model_params={**params, "output_pod_path": output_path},  # Store pod path too
             )
             show_success_toast(f"Job submitted: {job_id}")
             st.rerun()

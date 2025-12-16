@@ -92,11 +92,23 @@ MODELS = {
         "description": "Talking face video generation (image + audio)",
         "dir": "/data/StableAvatar",
         "venv": "/data/stableavatar-venv",
-        "enabled": False,  # Disabled until repo is added
+        "enabled": True,
         "template": "stableavatar.yaml",
-        "image": "TBD",
+        "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",  # Uses existing image (has ffmpeg)
         "input_type": "image_audio",
         "output_type": "video",
+    },
+    "syncnet": {
+        "id": "syncnet",
+        "name": "SyncNet Evaluator",
+        "description": "Lip sync quality evaluation for talking face videos",
+        "dir": "/data/syncnet_python",
+        "venv": "/data/syncnet-venv",
+        "enabled": True,
+        "template": "syncnet.yaml",
+        "image": "sgs-registry.snucse.org/ws-7l3atgjy3al41/svfr-base:latest",  # Uses existing image (has ffmpeg)
+        "input_type": "video",
+        "output_type": "evaluation",
     },
 }
 
