@@ -250,12 +250,15 @@ class StableAvatarModel(BaseModelRunner):
             pod_image_dir = os.path.join(POD_INPUT_IMAGES_DIR, job_id)
             pod_audio_dir = os.path.join(POD_INPUT_AUDIO_DIR, job_id)
 
-            subprocess.run(
+            mkdir_result = subprocess.run(
                 [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--",
                  "mkdir", "-p", pod_image_dir, pod_audio_dir],
                 capture_output=True,
-                timeout=30
+                timeout=30,
+                text=True
             )
+            if mkdir_result.returncode != 0:
+                raise RuntimeError(f"Failed to create directories on pod: {mkdir_result.stderr}")
 
             # Copy image to pod
             success, msg = k8s.copy_to_pod(local_image_path, PERSISTENT_POD_NAME, pod_paths["image"])

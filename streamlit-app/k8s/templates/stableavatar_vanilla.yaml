@@ -42,8 +42,8 @@ spec:
 
           cd /data/StableAvatar
 
-          # Run inference using the inference.sh script with --no-lora flag
-          ./inference.sh "${INPUT_IMAGE}" "${INPUT_AUDIO}" "${OUTPUT_DIR}" --steps ${INFERENCE_STEPS} --no-lora
+          # Run vanilla inference (without LoRA) using inference_vanilla.sh
+          ./inference_vanilla.sh "${INPUT_IMAGE}" "${INPUT_AUDIO}" "${OUTPUT_DIR}" --steps ${INFERENCE_STEPS}
 
           # The script outputs to $OUTPUT_DIR/video.mp4
           GENERATED="${OUTPUT_DIR}/video.mp4"

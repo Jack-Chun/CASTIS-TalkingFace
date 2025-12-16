@@ -155,8 +155,9 @@ def submit_comparison_jobs(model: StableAvatarModel, inputs: dict):
         # Job 1: LoRA fine-tuned model
         lora_job_id = f"{base_job_id}-lora"
         lora_pod_name = generate_pod_name(model.model_id, lora_job_id)
-        lora_output_path = model.get_output_path(lora_job_id, pod_paths, vanilla=False)
-        lora_local_output_path = model.get_local_output_path(lora_job_id, vanilla=False)
+        # Don't use vanilla parameter since job_id already has variant suffix
+        lora_output_path = model.get_output_path(lora_job_id, pod_paths)
+        lora_local_output_path = model.get_local_output_path(lora_job_id)
 
         os.makedirs(os.path.dirname(lora_local_output_path), exist_ok=True)
 
@@ -175,8 +176,9 @@ def submit_comparison_jobs(model: StableAvatarModel, inputs: dict):
         # Job 2: Vanilla model (no LoRA)
         vanilla_job_id = f"{base_job_id}-vanilla"
         vanilla_pod_name = generate_pod_name("stableavatar-vanilla", vanilla_job_id)
-        vanilla_output_path = model.get_output_path(vanilla_job_id, pod_paths, vanilla=True)
-        vanilla_local_output_path = model.get_local_output_path(vanilla_job_id, vanilla=True)
+        # Don't use vanilla parameter since job_id already has variant suffix
+        vanilla_output_path = model.get_output_path(vanilla_job_id, pod_paths)
+        vanilla_local_output_path = model.get_local_output_path(vanilla_job_id)
 
         os.makedirs(os.path.dirname(vanilla_local_output_path), exist_ok=True)
 
@@ -268,12 +270,8 @@ def render_stableavatar_output_viewer():
     completed_lora = [j for j in lora_jobs if j.get_state() == JobState.COMPLETED]
     completed_vanilla = [j for j in vanilla_jobs if j.get_state() == JobState.COMPLETED]
 
-    # Build a map of comparison pairs
-    comparison_pairs = {}
-    for job in completed_lora:
-        pair_id = job.model_params.get("comparison_pair")
-        if pair_id:
-            comparison_pairs[job.job_id] = pair_id
+    # Create lookup for all vanilla jobs by ID (any status)
+    all_vanilla_by_id = {j.job_id: j for j in vanilla_jobs}
 
     # Render comparison outputs first
     rendered_jobs = set()
@@ -287,8 +285,15 @@ def render_stableavatar_output_viewer():
             render_comparison_output(lora_job, vanilla_job)
             rendered_jobs.add(lora_job.job_id)
             rendered_jobs.add(vanilla_job.job_id)
+        elif vanilla_pair_id and vanilla_pair_id in all_vanilla_by_id:
+            # Has a pair but vanilla not completed - show status
+            pending_vanilla = all_vanilla_by_id[vanilla_pair_id]
+            vanilla_state = pending_vanilla.get_state()
+            render_single_output(lora_job, "LoRA")
+            st.info(f"⏳ Waiting for vanilla comparison: {vanilla_pair_id} (Status: {vanilla_state.value})")
+            rendered_jobs.add(lora_job.job_id)
         elif lora_job.job_id not in rendered_jobs:
-            # Single LoRA job - render normally
+            # Single LoRA job (no comparison pair) - render normally
             render_single_output(lora_job, "LoRA")
             rendered_jobs.add(lora_job.job_id)
 
