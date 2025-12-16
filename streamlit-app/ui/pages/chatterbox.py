@@ -2,13 +2,12 @@
 
 import streamlit as st
 import os
-import subprocess
 
 from models.chatterbox import ChatterboxModel
 from models.base import JobConfig
 from job_manager.manager import JobManager
 from k8s.client import KubernetesClient
-from config import IS_POD_ENV, PERSISTENT_POD_NAME, POD_INPUT_TEXTS_DIR, POD_INPUT_AUDIO_DIR
+from config import PERSISTENT_POD_NAME
 from ui.common import (
     generate_job_id,
     generate_pod_name,
@@ -18,36 +17,6 @@ from ui.common import (
 )
 from ui.components.job_status import render_job_status_panel, render_compact_job_status
 from ui.components.output_viewer import render_output_viewer
-
-
-def copy_files_to_pod(job_id: str, text_path: str, voice_path: str = None, voice_name: str = None):
-    """Copy input files to the persistent volume pod when running locally."""
-    k8s = KubernetesClient()
-
-    # Create directories on the pod
-    pod_text_dir = f"{POD_INPUT_TEXTS_DIR}/{job_id}"
-    mkdir_cmd = [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--", "mkdir", "-p", pod_text_dir]
-
-    if voice_path and voice_name:
-        pod_audio_dir = f"{POD_INPUT_AUDIO_DIR}/{job_id}"
-        mkdir_cmd = [k8s.kubectl, "exec", PERSISTENT_POD_NAME, "--", "mkdir", "-p", pod_text_dir, pod_audio_dir]
-
-    result = subprocess.run(mkdir_cmd, capture_output=True, timeout=30, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to create directories on pod: {result.stderr}")
-
-    # Copy text file
-    pod_text_path = f"{pod_text_dir}/input.txt"
-    success, msg = k8s.copy_to_pod(text_path, PERSISTENT_POD_NAME, pod_text_path)
-    if not success:
-        raise RuntimeError(f"Failed to copy text file to pod: {msg}")
-
-    # Copy voice file if provided
-    if voice_path and voice_name:
-        pod_voice_path = f"{POD_INPUT_AUDIO_DIR}/{job_id}/{voice_name}"
-        success, msg = k8s.copy_to_pod(voice_path, PERSISTENT_POD_NAME, pod_voice_path)
-        if not success:
-            raise RuntimeError(f"Failed to copy voice file to pod: {msg}")
 
 
 def render_chatterbox_page():
@@ -137,46 +106,32 @@ def submit_chatterbox_job(model: ChatterboxModel, inputs: dict):
         job_id = generate_job_id(model.model_id)
         pod_name = generate_pod_name(model.model_id, job_id)
 
-        # Save text input locally
+        # Save uploaded files (returns local_paths, pod_paths)
+        # Consistent with StableAvatar/Real-ESRGAN pattern
         text = inputs["params"]["text"]
-        local_text_path = model.save_text_input(text, job_id)
+        voice_file = inputs["files"].get("voice_prompt")  # Now a file object, not bytes
+        local_paths, pod_paths = model.save_uploaded_files(text, voice_file, job_id)
 
-        input_files = {"text": local_text_path}
         params = inputs["params"].copy()
+        params["voice_prompt_path"] = pod_paths["voice_prompt"]
 
-        # Handle voice prompt if provided
-        voice_prompt_data = inputs["files"].get("voice_prompt")
-        voice_prompt_name = inputs["files"].get("voice_prompt_name")
+        # Calculate output paths (pod path for YAML, local path for job tracking)
+        pod_output_path = model.get_output_path(job_id, local_paths)
+        local_output_path = model.get_local_output_path(job_id)
 
-        local_voice_path = None
-        if voice_prompt_data and voice_prompt_name:
-            # Save voice prompt file locally
-            local_voice_path = model.save_voice_prompt(voice_prompt_data, voice_prompt_name, job_id)
-            input_files["voice_prompt"] = local_voice_path
-            # Add pod path to params for YAML generation
-            params["voice_prompt_path"] = model.get_pod_voice_prompt_path(job_id, voice_prompt_name)
-        else:
-            # Use default prompt
-            params["voice_prompt_path"] = "/data/chatterbox/prompt.wav"
-
-        # If running locally, copy files to persistent volume pod
-        if not IS_POD_ENV:
-            copy_files_to_pod(job_id, local_text_path, local_voice_path, voice_prompt_name)
-
-        # Calculate output path
-        output_path = model.get_output_path(job_id, input_files)
+        # Add pod output path to params for copying from pod later
+        params["output_pod_path"] = pod_output_path
 
         # Ensure output directory exists (local)
-        local_output_dir = os.path.dirname(model.get_local_output_path(job_id))
-        os.makedirs(local_output_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(local_output_path), exist_ok=True)
 
         # Create job config for finetuned model
         config = JobConfig(
             job_id=job_id,
             pod_name=pod_name,
             model_id=model.model_id,
-            input_files=input_files,
-            output_file=output_path,
+            input_files=pod_paths,  # Use pod paths for YAML
+            output_file=pod_output_path,
             model_params=params,
         )
 
@@ -188,21 +143,26 @@ def submit_chatterbox_job(model: ChatterboxModel, inputs: dict):
         success, message = k8s.apply_yaml(yaml_content)
 
         if success:
-            # Register job
+            # Register job - store local paths for result viewing
             job_manager = JobManager()
             job_manager.create_job(
                 job_id=job_id,
                 pod_name=pod_name,
                 model_type=model.model_id,
-                input_files=input_files,
-                output_file=output_path,
+                input_files={
+                    "text": local_paths["text"],
+                    "text_pod": pod_paths["text"],
+                    "voice_prompt_pod": pod_paths["voice_prompt"],
+                    **({"voice_prompt": local_paths["voice_prompt"]} if "voice_prompt" in local_paths else {}),
+                },
+                output_file=local_output_path,  # Local path for file access
                 model_params=params,
             )
             show_success_toast(f"Finetuned job submitted: {job_id}")
 
             # If comparison mode, also submit vanilla job
             if params.get("compare_with_vanilla", False):
-                submit_vanilla_job(model, job_id, input_files, params)
+                submit_vanilla_job(model, job_id, local_paths, pod_paths, params)
 
             st.rerun()
         else:
@@ -212,27 +172,32 @@ def submit_chatterbox_job(model: ChatterboxModel, inputs: dict):
         show_error_toast(f"Error submitting job: {str(e)}")
 
 
-def submit_vanilla_job(model: ChatterboxModel, base_job_id: str, input_files: dict, params: dict):
+def submit_vanilla_job(model: ChatterboxModel, base_job_id: str, local_paths: dict, pod_paths: dict, params: dict):
     """Submit a vanilla (non-finetuned) Chatterbox TTS job for comparison."""
     try:
         # Generate IDs for vanilla job
         vanilla_job_id = f"{base_job_id}_vanilla"
         vanilla_pod_name = generate_pod_name(model.model_id, vanilla_job_id)
 
-        # Calculate output path for vanilla
-        vanilla_output_path = model.get_output_path(base_job_id, input_files, vanilla=True)
+        # Calculate output paths (pod path for YAML, local path for job tracking)
+        vanilla_pod_output_path = model.get_output_path(base_job_id, local_paths, vanilla=True)
+        vanilla_local_output_path = model.get_local_output_path(base_job_id, vanilla=True)
+
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(vanilla_local_output_path), exist_ok=True)
 
         # Create job config for vanilla model
         vanilla_params = params.copy()
         vanilla_params["is_vanilla"] = True
         vanilla_params["comparison_job_id"] = base_job_id
+        vanilla_params["output_pod_path"] = vanilla_pod_output_path
 
         vanilla_config = JobConfig(
             job_id=vanilla_job_id,
             pod_name=vanilla_pod_name,
             model_id=model.model_id,
-            input_files=input_files,
-            output_file=vanilla_output_path,
+            input_files=pod_paths,  # Use pod paths for YAML
+            output_file=vanilla_pod_output_path,
             model_params=vanilla_params,
         )
 
@@ -244,14 +209,19 @@ def submit_vanilla_job(model: ChatterboxModel, base_job_id: str, input_files: di
         success, message = k8s.apply_yaml(yaml_content)
 
         if success:
-            # Register vanilla job
+            # Register vanilla job with LOCAL output path for file access
             job_manager = JobManager()
             job_manager.create_job(
                 job_id=vanilla_job_id,
                 pod_name=vanilla_pod_name,
                 model_type=model.model_id,
-                input_files=input_files,
-                output_file=vanilla_output_path,
+                input_files={
+                    "text": local_paths["text"],
+                    "text_pod": pod_paths["text"],
+                    "voice_prompt_pod": pod_paths["voice_prompt"],
+                    **({"voice_prompt": local_paths["voice_prompt"]} if "voice_prompt" in local_paths else {}),
+                },
+                output_file=vanilla_local_output_path,
                 model_params=vanilla_params,
             )
             show_success_toast(f"Vanilla job submitted: {vanilla_job_id}")
